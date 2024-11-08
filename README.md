@@ -56,21 +56,6 @@ The extensive form of our stochastic program can be formulated as follows:
 
 ![Equation](https://latex.codecogs.com/svg.image?%5Cbegin%7Bequation%7D%5Cbegin%7Barray%7D%7Brll%7D%5Cmin%5Cquad&%5Csum_%7Bi%5Cin%20I%7Df_i%20x_i&plus;%5Csum_%7Bs%5Cin%20S%7D%5Csum_%7Bi%5Cin%20I%7D%5Csum_%7Bj%5Cin%20J%7D%5Calpha%5Es%20q_%7Bij%7Dy_%7Bij%7D%5Es&%5C%5C&&%5C%5C%5Ctextrm%7Bsubject%20to%7D%5Cquad&%5Csum_%7Bi%5Cin%20I%7Dy_%7Bij%7D%5Es%5Cgeq%5Clambda_j%5Es&%5Cforall%20j%5Cin%20J,%5Cforall%20s%5Cin%20S%5C%5C&%5Csum_%7Bj%5Cin%20J%7Dy_%7Bij%7D%5Es%5Cleq%20k_i%20x_i&%5Cforall%20i%5Cin%20I,%5Cforall%20s%5Cin%20S%5C%5C&%5Csum_%7Bi%5Cin%20I%7Dk_i%20x_i%5Cgeq%5Cmax_%7Bs%5Cin%20S%7D%5Csum_%7Bj%5Cin%20J%7D%5Clambda_j%5Es&%5C%5C&&%5C%5C&x_i%5Cin%5C%7B0,1%5C%7D&%5Cforall%20i%5Cin%20I%5C%5C&y_%7Bij%7D%5Es%5Cgeq%200&%5Cforall%20i%5Cin%20I,%5Cforall%20j%5Cin%20J,%5Cforall%20s%5Cin%20S%5Cend%7Barray%7D%5Ctag%7B1%7D%5Cend%7Bequation%7D)
 
-$
-\begin{equation}
-\begin{array}{rll}
- \min \quad & \sum_{i \in I} f_i x_i + \sum_{s \in S} \sum_{i \in I} \sum_{j \in J} \alpha^s q_{ij} y_{ij}^s & \\
- & &  \\
- \textrm{subject to} \quad & \sum_{i \in I} y_{ij}^s \geq \lambda_j^s & \forall j \in J, \forall s \in S \\
- & \sum_{j \in J} y_{ij}^s \leq k_i x_i & \forall i \in I, \forall s \in S \\
- & \sum_{i \in I} k_i x_i \geq \max_{s \in S} \sum_{j \in J} \lambda_j^s & \\
- & &  \\
- & x_i \in \{0, 1\} & \forall i \in I \\
- & y_{ij}^s \geq 0 & \forall i \in I, \forall j \in J, \forall s \in S
-\end{array} \tag{1}
-\end{equation}
-$
-
 
 ## Pyomo Model
 The model is encoded in the [pyomo_floc.py](src/pyomo_floc.py) file, which contains a function that instantiates the model given data generated based on the user's input.
