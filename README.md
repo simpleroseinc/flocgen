@@ -9,6 +9,7 @@ This repository contains Python scripts that can generate stochastic facility lo
    ```
 - **Usage:** Generate a problem where you try to choose which of 3 facilities to open in the state of Texas given 10 customers, 3 potential levels of future demand, where the transportation cost per distance is 3.14, a scale factor of 1.0 (i.e., **no scaling** is applied to the problem), and we are **not** pushing values to IEEE representation limits:
    ```sh
+   cd src/
    python pyomo_gen_floc.py --state TX --num_facilities 3 --num_customers 10 --num_scenarios 3 --cost_per_distance 3.14 --scale_factor 1.0 --ieee_limit False
    ```
 - **Output:** A `.mps` file containing the model and data.
@@ -53,6 +54,8 @@ Below you can find the extensive form of the stochastic facility location proble
 ### The extensive form
 The extensive form of our stochastic program can be formulated as follows:
 
+![Equation](https://latex.codecogs.com/svg.image?%5Cbegin%7Bequation%7D%5Cbegin%7Barray%7D%7Brll%7D%5Cmin%5Cquad&%5Csum_%7Bi%5Cin%20I%7Df_i%20x_i&plus;%5Csum_%7Bs%5Cin%20S%7D%5Csum_%7Bi%5Cin%20I%7D%5Csum_%7Bj%5Cin%20J%7D%5Calpha%5Es%20q_%7Bij%7Dy_%7Bij%7D%5Es&%5C%5C&&%5C%5C%5Ctextrm%7Bsubject%20to%7D%5Cquad&%5Csum_%7Bi%5Cin%20I%7Dy_%7Bij%7D%5Es%5Cgeq%5Clambda_j%5Es&%5Cforall%20j%5Cin%20J,%5Cforall%20s%5Cin%20S%5C%5C&%5Csum_%7Bj%5Cin%20J%7Dy_%7Bij%7D%5Es%5Cleq%20k_i%20x_i&%5Cforall%20i%5Cin%20I,%5Cforall%20s%5Cin%20S%5C%5C&%5Csum_%7Bi%5Cin%20I%7Dk_i%20x_i%5Cgeq%5Cmax_%7Bs%5Cin%20S%7D%5Csum_%7Bj%5Cin%20J%7D%5Clambda_j%5Es&%5C%5C&&%5C%5C&x_i%5Cin%5C%7B0,1%5C%7D&%5Cforall%20i%5Cin%20I%5C%5C&y_%7Bij%7D%5Es%5Cgeq%200&%5Cforall%20i%5Cin%20I,%5Cforall%20j%5Cin%20J,%5Cforall%20s%5Cin%20S%5Cend%7Barray%7D%5Ctag%7B1%7D%5Cend%7Bequation%7D)
+
 $
 \begin{equation}
 \begin{array}{rll}
@@ -70,15 +73,15 @@ $
 
 
 ## Pyomo Model
-The model is encoded in the [pyomo_floc.py](pyomo_floc.py) file, which contains a function that instantiates the model given data generated based on the user's input.
+The model is encoded in the [pyomo_floc.py](src/pyomo_floc.py) file, which contains a function that instantiates the model given data generated based on the user's input.
 
 
 ## Generator
-The [pyomo_gen_floc.py](pyomo_gen_floc.py) script generates data based on user input and creates a dictionary that is passed to the model instantiation function in [pyomo_floc.py](pyomo_floc.py) to instantiate the model.
+The [pyomo_gen_floc.py](src/pyomo_gen_floc.py) script generates data based on user input and creates a dictionary that is passed to the model instantiation function in [pyomo_floc.py](src/pyomo_floc.py) to instantiate the model.
 
 Users can select the state they would like to work in, the number of facilities to consider for supplying products to customers, and the number of cities where customers demanding the products are located. Additionally, users can choose the number of different demand scenarios to incorporate into the model. Finally, they can specify the transportation costs and whether to scale or push the parameter values to IEEE representation limits.
 
-The generator will then pick the most populous cities in the state for facilities (data is obtained by parsing the [uscities.csv](uscities.csv) file). For example, if the user chooses 7 facilities, the 7 most populous cities will be selected as potential distribution facilities. The remaining cities will be considered for customer locations. For example, if the user decides to have 70 customer locations, the 8th to the 77th most populous cities will be picked as customer locations.
+The generator will then pick the most populous cities in the state for facilities (data is obtained by parsing the [uscities.csv](data/uscities.csv) file). For example, if the user chooses 7 facilities, the 7 most populous cities will be selected as potential distribution facilities. The remaining cities will be considered for customer locations. For example, if the user decides to have 70 customer locations, the 8th to the 77th most populous cities will be picked as customer locations.
 
 Fixed costs for facilities are computed based on population: the more populated a city, the more expensive it is to open a facility. Variable costs, i.e., transportation costs, are computed based on the Haversine distance, which is then multiplied by the cost per distance input.
 
