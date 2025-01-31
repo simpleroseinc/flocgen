@@ -5,7 +5,7 @@ import pandas as pd
 from math import radians, sin, cos, sqrt, atan2
 from typing import Dict, List, Tuple
 from pyomo_floc import floc_model
-from pyomo.environ import SolverFactory
+from pyomo.environ import SolverFactory, TransformationFactory
 
 # Globals
 # List of valid two-letter state codes
@@ -425,7 +425,9 @@ def main():
         description="Provide arguments for generating facility location problems."
     )
     parser.add_argument(
-        "--state", type=str, default="TX", help="Two letter U.S. State id (str)"
+        "--state", type=str, 
+        default="TX", 
+        help="Two letter U.S. State id (str)"
     )
     parser.add_argument(
         "--num_facilities",
@@ -459,9 +461,13 @@ def main():
     )
     parser.add_argument(
         "--ieee_limit",
-        type=lambda x: (str(x).lower() == "true"),
-        default=False,
-        help="Problem pushed to IEEE 754 representation limits (true/false)",
+        action="store_true",
+        help="Problem pushed to IEEE 754 representation limits (default: False).",
+    )
+    parser.add_argument(
+        "--relax",
+        action="store_true",
+        help="Relax integrality (default: False).",
     )
     args = parser.parse_args()
 
@@ -473,6 +479,7 @@ def main():
     cost_per_distance = args.cost_per_distance
     scale_factor = args.scale_factor
     ieee_limit = args.ieee_limit
+    relax = args.relax
 
     # Prepare data which can be loaded into AMPL
     data = prep_data(
@@ -488,9 +495,14 @@ def main():
     # Create the Pyomo model
     model = floc_model(data)
 
+    # Relax integrality
+    if relax:
+        TransformationFactory('core.relax_integer_vars').apply_to(model)
+
+
     # Write it to an .mps file
     model.write(
-        f"pyomo_floc_{state}_{num_facilities}_{num_customers}_{num_scenarios}_{cost_per_distance}_{scale_factor}_{ieee_limit}.mps"
+        f"pyomo_floc_{state}_{num_facilities}_{num_customers}_{num_scenarios}_{cost_per_distance}_{scale_factor}_ieee_{ieee_limit}_relax_{relax}.mps"
     )
 
 
