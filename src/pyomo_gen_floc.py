@@ -6,6 +6,7 @@ from math import radians, sin, cos, sqrt, atan2
 from typing import Dict, List, Tuple
 from pyomo_floc import floc_model
 from pyomo.environ import SolverFactory, TransformationFactory
+from pyomo.util.model_size import build_model_size_report
 
 # Globals
 # List of valid two-letter state codes
@@ -422,7 +423,7 @@ def main():
 
     # Parse arguments
     parser = argparse.ArgumentParser(
-        description="Provide arguments for generating facility location problems."
+            description="Realistic stochastic facility location (floc) problem generator (arguments: state, number of facilities, number of customers, number of scenarios, etc.)."
     )
     parser.add_argument(
         "--state", type=str, 
@@ -469,6 +470,12 @@ def main():
         action="store_true",
         help="Relax integrality (default: False).",
     )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default=".",
+        help="Directory for output files (default: current directory).",
+    )
     args = parser.parse_args()
 
     # Create variables from arguments
@@ -481,7 +488,13 @@ def main():
     ieee_limit = args.ieee_limit
     relax = args.relax
 
-    # Prepare data which can be loaded into AMPL
+    # Make sure output directory exists (create it if needed)
+    os.makedirs(args.output_dir, exist_ok=True)
+    file_name = f"floc_{state}_{num_facilities}_{num_customers}_{num_scenarios}_{cost_per_distance}_{scale_factor}_ieee_{ieee_limit}_relax_{relax}.mps"
+    file_path = os.path.join(args.output_dir, file_name)
+
+
+    # Prepare data which can be loaded into Pyomo
     data = prep_data(
         state,
         num_facilities,
@@ -498,12 +511,14 @@ def main():
     # Relax integrality
     if relax:
         TransformationFactory('core.relax_integer_vars').apply_to(model)
-
+    
+    # Print out size info of generated model
+    print(f"Generated Model Statistics")
+    print(build_model_size_report(model))
 
     # Write it to an .mps file
-    model.write(
-        f"pyomo_floc_{state}_{num_facilities}_{num_customers}_{num_scenarios}_{cost_per_distance}_{scale_factor}_ieee_{ieee_limit}_relax_{relax}.mps"
-    )
+    print(f"Model written to:\n\t{file_path}") 
+    model.write(file_path)
 
 
 if __name__ == "__main__":
