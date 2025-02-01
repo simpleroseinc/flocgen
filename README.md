@@ -13,6 +13,7 @@ This repository contains Python scripts that can generate stochastic facility lo
    python pyomo_gen_floc.py --state TX --num_facilities 3 --num_customers 10 --num_scenarios 3 --cost_per_distance 3.14 --scale_factor 1.0 --ieee_limit False
    ```
 - **Output:** A `.mps` file containing the model and data.
+- **Note:** You can relax integrality by passing the `--relax` flag.
 
 
 ## Problem description
