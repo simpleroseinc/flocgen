@@ -1,2 +1,6 @@
+gurobipy
+highspy
+numpy
 pandas
+pandas-stubs
 pyomo
