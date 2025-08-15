@@ -1,14 +1,12 @@
 # main.py
-from benders import benders_solve
-# Load/prepare your 'data' dict exactly as used by pyomo_floc.py
-# data = {...}
 
 import argparse
 from gen_data import *
 from ef import *
-from pyomo.core import value
-from pyomo.environ import SolverFactory, TransformationFactory
+from pyomo.environ import *
 from pyomo.util.model_size import build_model_size_report
+from benders import benders_solve
+
 
 # Utility functions
 def validate_state_code(state_code: str) -> str:
@@ -42,6 +40,16 @@ def positive_float(value):
     return fvalue
 
 
+def get_objective_value(model):
+    # Find the active objective(s) in the model
+    objs = [obj for obj in model.component_objects(Objective, active=True)]
+    if not objs:
+        raise RuntimeError("No active objective found in the model.")
+    if len(objs) > 1:
+        print("Warning: Multiple active objectives found, returning the first one.")
+    obj = objs[0]
+    return value(obj)
+
 
 def main():
     # Parse arguments
@@ -49,9 +57,7 @@ def main():
         description="Realistic stochastic facility location (floc) problem generator (arguments: state, number of facilities, number of customers, number of scenarios, etc.)."
     )
     parser.add_argument(
-        "--state", type=str,
-        default="TX",
-        help="Two letter U.S. State id (str)"
+        "--state", type=str, default="TX", help="Two letter U.S. State id (str)"
     )
     parser.add_argument(
         "--num_facilities",
@@ -146,7 +152,7 @@ def main():
 
     # Relax integrality
     if relax:
-        TransformationFactory('core.relax_integer_vars').apply_to(model)
+        TransformationFactory("core.relax_integer_vars").apply_to(model)
 
     # Print out size info of generated model
     print(f"Generated Model Statistics")
@@ -161,16 +167,19 @@ def main():
         # Write file
         print(f"Model written to:\n\t{file_path}")
     elif mode == "ef":
-        solver = SolverFactory(f"appsi_{solver}")
-        result = solver.solve(model)
-
+        s = SolverFactory(f"appsi_{solver}")
+        s.solve(model)
     else:
-        model, history = benders_solve(data,
-                                          master_solver="gurobi",
-                                          sub_solver="gurobi",
-                                          max_iters=50, tol=1e-6, log=True)
+        model, history = benders_solve(
+            data,
+            master_solver=f"{solver}",
+            sub_solver=f"{solver}",
+            max_iters=50,
+            tol=1e-6,
+            log=True,
+        )
 
-    print(f"Objective: {result}")
+    print(f"Objective: {get_objective_value(model)} (mode: {mode}, solver: {solver})")
 
 
 if __name__ == "__main__":

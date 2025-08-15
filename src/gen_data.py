@@ -317,7 +317,9 @@ def prep_data(
 
     # Load the csv of us cities
     # uscities.csv was obtained from https://simplemaps.com/data/us-cities
-    all_cities_df = pd.read_csv(os.path.join(os.path.dirname(__file__), "../data/uscities.csv"))
+    all_cities_df = pd.read_csv(
+        os.path.join(os.path.dirname(__file__), "../data/uscities.csv")
+    )
 
     # Select state, city, latitude, longitude, and population columns
     all_cities_df = all_cities_df[["state_id", "city", "lat", "lng", "population"]]
@@ -383,5 +385,3 @@ def prep_data(
         "production_coeff": production_coeff,
         "customer_demand": customer_demand_df,
     }
-
-
