@@ -11,45 +11,54 @@ def build_master(data, use_capacity_sufficiency=True):
     If use_capacity_sufficiency is True, adds a feasibility "guard" constraint.
     Returns a Pyomo model ready to be solved.
     """
-    m = ConcreteModel(name="BendersMaster")
+    model = ConcreteModel(name="FacilityLocation-BendersMaster")
 
-    # Sets (same naming as your extensive-form)
-    m.F = Set(initialize=data["FACILITIES"])
-    m.C = Set(initialize=data["CUSTOMERS"])
-    m.S = Set(initialize=data["SCENARIOS"])
+    model.FACILITIES = Set(initialize=data["FACILITIES"])
+    model.CUSTOMERS = Set(initialize=data["CUSTOMERS"])
+    model.SCENARIOS = Set(initialize=data["SCENARIOS"])
 
     # Parameters
-    m.fixed_cost = Param(m.F, initialize=data["fixed_cost"])
+    model.fixed_cost = Param(model.FACILITIES, initialize=data["fixed_cost"])
     # Expected value weights
-    m.prob = Param(m.S, initialize=data["prob"])
+    model.prob = Param(model.SCENARIOS, initialize=data["prob"])
     # For the optional feasibility guard:
-    m.facility_capacity = Param(m.F, initialize=data["facility_capacity"])
-    m.customer_demand = Param(
-        m.C, m.S, initialize=data["customer_demand"].stack().to_dict()
+    model.facility_capacity = Param(
+        model.FACILITIES, initialize=data["facility_capacity"]
+    )
+    model.customer_demand = Param(
+        model.CUSTOMERS,
+        model.SCENARIOS,
+        initialize=data["customer_demand"].stack().to_dict(),
     )
     # First-stage: open/close
-    m.x = Var(m.F, within=Binary)
+    model.x = Var(model.FACILITIES, within=Binary)
     # Benders (recourse) variables (multi-cut version)
-    m.theta = Var(m.S, within=NonNegativeReals)
+    model.theta = Var(model.SCENARIOS, within=NonNegativeReals)
 
     # Objective: fixed + expected recourse
     def obj_rule(m):
-        fixed = sum(m.fixed_cost[i] * m.x[i] for i in m.F)
-        rec = sum(m.prob[s] * m.theta[s] for s in m.S)
+        fixed = sum(m.fixed_cost[i] * m.x[i] for i in m.FACILITIES)
+        rec = sum(m.prob[s] * m.theta[s] for s in m.SCENARIOS)
         return fixed + rec
 
-    m.Obj = Objective(rule=obj_rule, sense=minimize)
+    model.Obj = Objective(rule=obj_rule, sense=minimize)
 
     # Optional feasibility “guard”: total capacity of open facs ≥ worst-case total demand
     if use_capacity_sufficiency:
-        worst_total = max(sum(value(m.customer_demand[j, s]) for j in m.C) for s in m.S)
+        worst_total = max(
+            sum(value(model.customer_demand[j, s]) for j in model.CUSTOMERS)
+            for s in model.SCENARIOS
+        )
 
         def cap_guard(m):
-            return sum(m.facility_capacity[i] * m.x[i] for i in m.F) >= worst_total
+            return (
+                sum(m.facility_capacity[i] * m.x[i] for i in m.FACILITIES)
+                >= worst_total
+            )
 
-        m.CapacityGuard = Constraint(rule=cap_guard)
+        model.CapacityGuard = Constraint(rule=cap_guard)
 
     # Benders cuts added here during the algorithm
-    m.BendersCuts = ConstraintList()
+    model.BendersCuts = ConstraintList()
 
-    return m
+    return model

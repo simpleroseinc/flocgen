@@ -8,7 +8,7 @@ DataDict = Dict[str, Union[NumDict, pd.DataFrame]]
 
 def floc_model(data: DataDict) -> ConcreteModel:
     # Define the model
-    model = ConcreteModel()
+    model = ConcreteModel(name="FacilityLocation-ExtensiveForm")
 
     # Indexing sets
     model.FACILITIES = Set(initialize=data["FACILITIES"])

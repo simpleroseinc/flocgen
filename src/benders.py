@@ -17,7 +17,7 @@ def benders_solve(
 
     Returns (master_model, history) where history logs bounds per iteration.
     """
-    M = build_master(data, use_capacity_sufficiency=True)
+    master = build_master(data, use_capacity_sufficiency=True)
     ms = SolverFactory(master_solver)
     ss = SolverFactory(sub_solver)
     if time_limit:
@@ -33,19 +33,19 @@ def benders_solve(
 
     for it in range(1, max_iters + 1):
         # ---- solve master
-        resM = ms.solve(M, tee=log)
-        LB = value(M.Obj)  # master gives a lower bound
+        resM = ms.solve(master, tee=log)
+        LB = value(master.Obj)  # master gives a lower bound
         bestLB = max(bestLB, LB)
 
         # Read x and current theta
-        xbar = {i: round(value(M.x[i])) for i in M.F}
-        thetabar = {s: value(M.theta[s]) for s in M.S}
+        xbar = {i: round(value(master.x[i])) for i in master.FACILITIES}
+        thetabar = {s: value(master.theta[s]) for s in master.SCENARIOS}
 
         # ---- solve each scenario dual and add cuts
         expected_recourse = 0.0
         violated = False
 
-        for s in M.S:
+        for s in master.SCENARIOS:
             D = build_dual_subproblem_for_scenario(data, s, xbar)
             if time_limit:
                 try:
@@ -55,7 +55,7 @@ def benders_solve(
             resS = ss.solve(D, tee=False)
 
             q_s = value(D.Obj)  # subproblem optimal (dual) value
-            expected_recourse += value(M.prob[s]) * q_s
+            expected_recourse += value(master.prob[s]) * q_s
 
             # Duals → Benders cut: theta[s] ≥ Σ_j d_js * pi_j  + Σ_i cap_i * mu_i * x_i
             # Build the RHS expression using the *dual* solution we just found
@@ -67,17 +67,19 @@ def benders_solve(
             rhs_eps = max(rhs, 0.0)
 
             # If cut is violated (theta[s] < rhs - tol), add it
-            if value(M.theta[s]) < rhs_eps - tol:
-                M.BendersCuts.add(
-                    M.theta[s]
+            if value(master.theta[s]) < rhs_eps - tol:
+                master.BendersCuts.add(
+                    master.theta[s]
                     >= sum(float(D.demand[j]) * value(D.pi[j]) for j in D.C)
-                    + sum(float(D.cap[i]) * M.x[i] * value(D.mu[i]) for i in D.F)
+                    + sum(float(D.cap[i]) * master.x[i] * value(D.mu[i]) for i in D.F)
                 )
                 violated = True
 
         # Update UB using the current xbar with exact subproblem value
         # (fixed cost + expected recourse computed from subproblems)
-        fixed_cost = sum(value(M.fixed_cost[i]) * xbar[i] for i in M.F)
+        fixed_cost = sum(
+            value(master.fixed_cost[i]) * xbar[i] for i in master.FACILITIES
+        )
         UB = fixed_cost + expected_recourse
         bestUB = min(bestUB, UB)
 
@@ -102,4 +104,4 @@ def benders_solve(
                 print("Benders converged.")
             break
 
-    return M, history
+    return master, history

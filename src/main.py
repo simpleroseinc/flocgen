@@ -159,16 +159,20 @@ def main():
     print(build_model_size_report(model))
 
     # Handle different modes
-    result = None
+    obj_val = None
     if mode in ["mps", "lp"]:
+        # Write MPS or LP file
         file_name = f"floc_{state}_{num_facilities}_{num_customers}_{num_scenarios}_{cost_per_distance}_{scale_factor}_ieee_{ieee_limit}_relax_{relax}.{mode}"
         file_path = os.path.join(args.output_dir, file_name)
         model.write(file_path)
-        # Write file
         print(f"Model written to:\n\t{file_path}")
     elif mode == "ef":
         s = SolverFactory(f"appsi_{solver}")
-        s.solve(model)
+        s.solve(model, tee=True)
+        obj_val = get_objective_value(model)
+        print(
+            f"Extensive form solve of floc_{state}_{num_facilities}_{num_customers}_{num_scenarios}_{cost_per_distance}_{scale_factor}_ieee_{ieee_limit}_relax_{relax}"
+        )
     else:
         model, history = benders_solve(
             data,
@@ -178,8 +182,15 @@ def main():
             tol=1e-6,
             log=True,
         )
+        obj_val = get_objective_value(model)
+        print(
+            f"Benders solve of floc_{state}_{num_facilities}_{num_customers}_{num_scenarios}_{cost_per_distance}_{scale_factor}_ieee_{ieee_limit}_relax_{relax}"
+        )
 
-    print(f"Objective: {get_objective_value(model)} (mode: {mode}, solver: {solver})")
+    if obj_val is not None:
+        print(
+            f"Objective: {get_objective_value(model)} (mode: {mode}, solver: {solver})"
+        )
 
 
 if __name__ == "__main__":
