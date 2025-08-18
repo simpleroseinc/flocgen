@@ -51,6 +51,6 @@ def build_dual_subproblem_for_scenario(data, s, x_values):
         term_cap = sum(m.cap[i] * m.xbar[i] * m.mu[i] for i in m.F)
         return term_demand + term_cap
 
-    m.Obj = Objective(rule=dual_obj, sense=maximize)
+    m.objective = Objective(rule=dual_obj, sense=maximize)
 
     return m

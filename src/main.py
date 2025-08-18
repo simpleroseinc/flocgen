@@ -20,23 +20,23 @@ def validate_state_code(state_code: str) -> str:
     return state_code.upper()
 
 
-def positive_int(value):
+def positive_int(val) -> int:
     """
     Validate that the value provided by the user is a positive integer.
     """
-    ivalue = int(value)
+    ivalue = int(val)
     if ivalue <= 0:
-        raise argparse.ArgumentTypeError(f"{value} is an invalid positive int value")
+        raise argparse.ArgumentTypeError(f"{val} is an invalid positive int value")
     return ivalue
 
 
-def positive_float(value):
+def positive_float(val) -> float:
     """
     Validate that the value provided by the user is a positive float.
     """
-    fvalue = float(value)
+    fvalue = float(val)
     if fvalue <= 0:
-        raise argparse.ArgumentTypeError(f"{value} is an invalid positive float value")
+        raise argparse.ArgumentTypeError(f"{val} is an invalid positive float value")
     return fvalue
 
 

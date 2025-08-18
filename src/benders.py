@@ -17,7 +17,7 @@ def benders_solve(
 
     Returns (master_model, history) where history logs bounds per iteration.
     """
-    master = build_master(data, use_capacity_sufficiency=True)
+    master = build_master(data=data, capacity_rule=CapacityRule.MAX)
     ms = SolverFactory(master_solver)
     ss = SolverFactory(sub_solver)
     if time_limit:
@@ -34,12 +34,12 @@ def benders_solve(
     for it in range(1, max_iters + 1):
         # ---- solve master
         resM = ms.solve(master, tee=log)
-        LB = value(master.Obj)  # master gives a lower bound
+        LB = value(master.objective)  # master gives a lower bound
         bestLB = max(bestLB, LB)
 
         # Read x and current theta
-        xbar = {i: round(value(master.x[i])) for i in master.FACILITIES}
-        thetabar = {s: value(master.theta[s]) for s in master.SCENARIOS}
+        xbar = {i: round(value(master.facility_open[i])) for i in master.FACILITIES}
+        thetabar = {s: value(master.sub_variable_cost[s]) for s in master.SCENARIOS}
 
         # ---- solve each scenario dual and add cuts
         expected_recourse = 0.0
@@ -54,7 +54,7 @@ def benders_solve(
                     pass
             resS = ss.solve(D, tee=False)
 
-            q_s = value(D.Obj)  # subproblem optimal (dual) value
+            q_s = value(D.objective)  # subproblem optimal (dual) value
             expected_recourse += value(master.prob[s]) * q_s
 
             # Duals → Benders cut: theta[s] ≥ Σ_j d_js * pi_j  + Σ_i cap_i * mu_i * x_i
@@ -67,11 +67,14 @@ def benders_solve(
             rhs_eps = max(rhs, 0.0)
 
             # If cut is violated (theta[s] < rhs - tol), add it
-            if value(master.theta[s]) < rhs_eps - tol:
+            if value(master.sub_variable_cost[s]) < rhs_eps - tol:
                 master.BendersCuts.add(
-                    master.theta[s]
+                    master.sub_variable_cost[s]
                     >= sum(float(D.demand[j]) * value(D.pi[j]) for j in D.C)
-                    + sum(float(D.cap[i]) * master.x[i] * value(D.mu[i]) for i in D.F)
+                    + sum(
+                        float(D.cap[i]) * master.facility_open[i] * value(D.mu[i])
+                        for i in D.F
+                    )
                 )
                 violated = True
 
