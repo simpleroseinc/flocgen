@@ -1,5 +1,4 @@
 # Master problem for Benders decomposition of two-stage stochastic facility location
-# Extensive-form has first-stage open/close decisions and second-stage variable costs
 # Benders feasibility cuts and optimality cuts are added iteratively
 from enum import Enum
 from pyomo.environ import *
@@ -24,7 +23,7 @@ def build_master(data, capacity_rule: CapacityRule) -> ConcreteModel:
     model.CUSTOMERS = Set(initialize=data["CUSTOMERS"])
     model.SCENARIOS = Set(initialize=data["SCENARIOS"])
 
-    # Master Only Parameters
+    # Master-only Parameters
     model.fixed_cost = Param(model.FACILITIES, initialize=data["fixed_cost"])
     model.prob = Param(model.SCENARIOS, initialize=data["prob"])
     # Master and Subproblem Parameters

@@ -15,12 +15,6 @@ def floc_model(data: DataDict) -> ConcreteModel:
     model.CUSTOMERS = Set(initialize=data["CUSTOMERS"])
     model.SCENARIOS = Set(initialize=data["SCENARIOS"])
 
-    # Variables
-    model.facility_open = Var(model.FACILITIES, within=Binary)
-    model.production = Var(
-        model.FACILITIES, model.CUSTOMERS, model.SCENARIOS, within=NonNegativeReals
-    )
-
     # Parameters
     model.fixed_cost = Param(
         model.FACILITIES, initialize=data["fixed_cost"], within=NonNegativeReals
@@ -49,6 +43,12 @@ def floc_model(data: DataDict) -> ConcreteModel:
     )
     model.prob = Param(
         model.SCENARIOS, initialize=data["prob"], within=NonNegativeReals
+    )
+
+    # Variables
+    model.facility_open = Var(model.FACILITIES, within=Binary)
+    model.production = Var(
+        model.FACILITIES, model.CUSTOMERS, model.SCENARIOS, within=NonNegativeReals
     )
 
     # Objective

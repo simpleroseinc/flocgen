@@ -1,56 +1,81 @@
-# Subproblem (dual) for a given scenario
+# Subproblem for a given scenario
 # Given a fixed first-stage solution x, solve the dual LP for scenario s.
 # This is used to generate Benders cuts.
 from pyomo.environ import *
 
 
-def build_dual_subproblem_for_scenario(data, s, x_values):
+def build_subproblem_for_scenario(data, scenario, facility_open) -> ConcreteModel:
     """
-    Build the dual LP for scenario s, given a fixed x (dict-like {i:0/1}).
+    Build the dual LP for scenario s, given a fixed sub_facility_open (dict-like {i:0/1}).
     Returns a Pyomo model ready to be solved.
     """
-    m = ConcreteModel(name=f"Dual_s={s}")
+    model = ConcreteModel(name=f"FacilityLocation-BendersSubProblem-{scenario}")
+    # Create a 'dual' and 'dunbdd` suffix components on the model so the solver plugin will know which suffixes to collect
+    model.dual = Suffix(direction=Suffix.IMPORT)
+    model.dunbdd = Suffix(direction=Suffix.IMPORT_EXPORT)
 
-    m.F = Set(initialize=data["FACILITIES"])
-    m.C = Set(initialize=data["CUSTOMERS"])
+    # Indexing sets
+    model.FACILITIES = Set(initialize=data["FACILITIES"])
+    model.CUSTOMERS = Set(initialize=data["CUSTOMERS"])
 
-    # Params
-    m.cap = Param(m.F, initialize=data["facility_capacity"])
-    m.demand = Param(
-        m.C,
-        initialize={j: data["customer_demand"].loc[j, s] for j in data["CUSTOMERS"]},
+    # Parameters
+    # Master and Suproblem Parameters
+    model.facility_capacity = Param(
+        model.FACILITIES, initialize=data["facility_capacity"], within=NonNegativeReals
     )
-    # variable_cost is a DataFrame with column 'distance' → dict with (i,j) keys in your EF
-    vc_dict = data["variable_cost"]["distance"].to_dict()
-    m.c = Param(m.F, m.C, initialize=vc_dict)
+    model.customer_demand = Param(
+        model.CUSTOMERS,
+        initialize={
+            j: data["customer_demand"].loc[j, scenario] for j in data["CUSTOMERS"]
+        },
+        within=NonNegativeReals,
+    )
+    # Suproblem-only parameters
+    model.variable_cost = Param(
+        model.FACILITIES,
+        model.CUSTOMERS,
+        initialize=data["variable_cost"]["distance"].to_dict(),
+        within=NonNegativeReals,
+    )
+    # Benders' parameters
+    model.scenario = Param(initialize=scenario)
+    model.facility_open = Param(
+        model.FACILITIES,
+        initialize={i: float(facility_open[i]) for i in data["FACILITIES"]},
+    )
 
-    # production_coeff is DataFrame with column 'production_coeff' keyed by (i,j,s)
-    a_dict = data["production_coeff"]["production_coeff"].to_dict()
-
-    def a_init(m, i, j):
-        return a_dict[(i, j, s)]
-
-    m.a = Param(m.F, m.C, initialize=a_init)
-
-    # Fixed first-stage x
-    m.xbar = Param(m.F, initialize={i: float(x_values[i]) for i in data["FACILITIES"]})
-
+    # Variables
     # Dual variables
-    m.pi = Var(m.C, within=NonNegativeReals)  # for demand ≥ constraints
-    m.mu = Var(m.F, within=NonPositiveReals)  # for capacity ≤ constraints
+    model.production = Var(
+        model.FACILITIES, model.CUSTOMERS, scenario, within=NonNegativeReals
+    )
 
-    # Dual constraints: a_{ij}(pi_j + mu_i) ≤ c_{ij}
-    def dual_con_rule(m, i, j):
-        return m.a[i, j] * (m.pi[j] + m.mu[i]) <= m.c[i, j]
+    # Subproblem objective
+    def operating_cost_rule(m):
+        return sum(
+            m.variable_cost[i, j] * m.production[i, j]
+            for i in m.FACILITIES
+            for j in m.CUSTOMERS
+        )
 
-    m.DualCon = Constraint(m.F, m.C, rule=dual_con_rule)
+    model.objective = Objective(rule=operating_cost_rule, sense=maximize)
 
-    # Dual objective
-    def dual_obj(m):
-        term_demand = sum(m.demand[j] * m.pi[j] for j in m.C)
-        term_cap = sum(m.cap[i] * m.xbar[i] * m.mu[i] for i in m.F)
-        return term_demand + term_cap
+    # Constraints
+    def satisfying_customer_demand_rule(m, j):
+        return sum(m.production[i, j] for i in m.FACILITIES) >= m.customer_demand[j]
 
-    m.objective = Objective(rule=dual_obj, sense=maximize)
+    model.satisfying_customer_demand = Constraint(
+        model.CUSTOMERS, rule=satisfying_customer_demand_rule
+    )
 
-    return m
+    def facility_capacity_limits_rule(m, i):
+        return (
+            sum(m.production[i, j] for j in m.CUSTOMERS)
+            <= m.facility_capacity[i] * m.facility_open[i]
+        )
+
+    model.facility_capacity_limits = Constraint(
+        model.FACILITIES, rule=facility_capacity_limits_rule
+    )
+
+    return model

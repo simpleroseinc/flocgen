@@ -46,7 +46,7 @@ def benders_solve(
         violated = False
 
         for s in master.SCENARIOS:
-            D = build_dual_subproblem_for_scenario(data, s, xbar)
+            D = build_subproblem_for_scenario(data, s, xbar)
             if time_limit:
                 try:
                     ss.options["timelimit"] = time_limit
@@ -59,8 +59,11 @@ def benders_solve(
 
             # Duals → Benders cut: theta[s] ≥ Σ_j d_js * pi_j  + Σ_i cap_i * mu_i * x_i
             # Build the RHS expression using the *dual* solution we just found
-            rhs = sum(value(D.demand[j]) * value(D.pi[j]) for j in D.C) + sum(
-                value(D.cap[i]) * xbar[i] * value(D.mu[i]) for i in D.F
+            rhs = sum(
+                value(D.customer_demand[j]) * value(D.pi[j]) for j in D.CUSTOMERS
+            ) + sum(
+                value(D.facility_capacity[i]) * xbar[i] * value(D.mu[i])
+                for i in D.FACILITIES
             )
 
             # numeric guard: rhs can be tiny negative due to numerical noise
@@ -70,10 +73,15 @@ def benders_solve(
             if value(master.sub_variable_cost[s]) < rhs_eps - tol:
                 master.BendersCuts.add(
                     master.sub_variable_cost[s]
-                    >= sum(float(D.demand[j]) * value(D.pi[j]) for j in D.C)
+                    >= sum(
+                        float(D.customer_demand[j]) * value(D.pi[j])
+                        for j in D.CUSTOMERS
+                    )
                     + sum(
-                        float(D.cap[i]) * master.facility_open[i] * value(D.mu[i])
-                        for i in D.F
+                        float(D.facility_capacity[i])
+                        * master.facility_open[i]
+                        * value(D.mu[i])
+                        for i in D.FACILITIES
                     )
                 )
                 violated = True
