@@ -1,12 +1,14 @@
+from enum import Enum
 import pandas as pd
 from typing import Dict, Union
 from pyomo.environ import *
+from utils import *
 
 NumDict = Dict[str, Union[int, float]]
 DataDict = Dict[str, Union[NumDict, pd.DataFrame]]
 
 
-def floc_model(data: DataDict) -> ConcreteModel:
+def floc_model(data: DataDict, capacity_rule: CapacityRule) -> ConcreteModel:
     # Define the model
     model = ConcreteModel(name="FacilityLocation-ExtensiveForm")
 
@@ -93,13 +95,13 @@ def floc_model(data: DataDict) -> ConcreteModel:
         model.SCENARIOS, model.FACILITIES, rule=facility_capacity_limits_rule
     )
 
-    def sufficient_production_capacity_rule(model):
-        return sum(
-            model.facility_capacity[i] * model.facility_open[i]
-            for i in model.FACILITIES
-        ) >= max(
-            sum(model.customer_demand[j, s] for j in model.CUSTOMERS)
-            for s in model.SCENARIOS
+    # Sufficient production capacity constraint
+    def sufficient_production_capacity_rule(m):
+        # Determine the capacity threshold for sufficient production capacity (max means demand will be satisfied under all circumstances)
+        capacity_threshold = calculate_capacity_threshold(m, capacity_rule)
+        return (
+            sum(m.facility_capacity[i] * m.facility_open[i] for i in m.FACILITIES)
+            >= capacity_threshold
         )
 
     model.sufficient_production_capacity = Constraint(

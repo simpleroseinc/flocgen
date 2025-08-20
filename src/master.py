@@ -1,13 +1,7 @@
 # Master problem for Benders decomposition of two-stage stochastic facility location
 # Benders feasibility cuts and optimality cuts are added iteratively
-from enum import Enum
 from pyomo.environ import *
-
-
-class CapacityRule(Enum):
-    MAX = "max"
-    AVERAGE = "average"
-    EXPECTED = "expected"
+from utils import *
 
 
 def build_master(data, capacity_rule: CapacityRule) -> ConcreteModel:
@@ -54,32 +48,12 @@ def build_master(data, capacity_rule: CapacityRule) -> ConcreteModel:
 
     # Constraints
     # Sufficient production capacity constraint
-    # Determine the capacity threshold for sufficient production capacity (max means demand will be satisfied under all circumstances)
-    if capacity_rule == CapacityRule.MAX:
-        capacity_threshold = max(
-            sum(value(model.customer_demand[j, s]) for j in model.CUSTOMERS)
-            for s in model.SCENARIOS
-        )
-    elif capacity_rule == CapacityRule.AVERAGE:
-        capacity_threshold = sum(
-            sum(value(model.customer_demand[j, s]) for j in model.CUSTOMERS)
-            for s in model.SCENARIOS
-        ) / len(model.SCENARIOS)
-    elif capacity_rule == CapacityRule.EXPECTED:
-        capacity_threshold = sum(
-            sum(
-                value(model.customer_demand[j, s]) * value(model.prob[s])
-                for j in model.CUSTOMERS
-            )
-            for s in model.SCENARIOS
-        )
-    else:
-        raise ValueError(f"Unsupported capacity rule: {capacity_rule}")
-
     def sufficient_production_capacity_rule(m):
+        # Determine the capacity threshold for sufficient production capacity (max means demand will be satisfied under all circumstances)
+        capacity_threshold = calculate_capacity_threshold(m, capacity_rule)
         return (
             sum(m.facility_capacity[i] * m.facility_open[i] for i in m.FACILITIES)
-            >= 0  # capacity_threshold
+            >= capacity_threshold
         )
 
     model.sufficient_production_capacity = Constraint(

@@ -1,60 +1,15 @@
 # main.py
-
-import argparse
-from gen_data import *
+from utils import *
 from ef import *
 from pyomo.environ import *
 from pyomo.util.model_size import build_model_size_report
 from benders import benders_solve
 
 
-# Utility functions
-def validate_state_code(state_code: str) -> str:
-    """
-    Validate the state code provided by the user.
-    """
-    if state_code.upper() not in VALID_STATE_CODES:
-        raise argparse.ArgumentTypeError(
-            f"Invalid state code: {state_code}. Must be one of {', '.join(VALID_STATE_CODES)}."
-        )
-    return state_code.upper()
-
-
-def positive_int(val) -> int:
-    """
-    Validate that the value provided by the user is a positive integer.
-    """
-    ivalue = int(val)
-    if ivalue <= 0:
-        raise argparse.ArgumentTypeError(f"{val} is an invalid positive int value")
-    return ivalue
-
-
-def positive_float(val) -> float:
-    """
-    Validate that the value provided by the user is a positive float.
-    """
-    fvalue = float(val)
-    if fvalue <= 0:
-        raise argparse.ArgumentTypeError(f"{val} is an invalid positive float value")
-    return fvalue
-
-
-def get_objective_value(model):
-    # Find the active objective(s) in the model
-    objs = [obj for obj in model.component_objects(Objective, active=True)]
-    if not objs:
-        raise RuntimeError("No active objective found in the model.")
-    if len(objs) > 1:
-        print("Warning: Multiple active objectives found, returning the first one.")
-    obj = objs[0]
-    return value(obj)
-
-
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser(
-        description="Realistic stochastic facility location (floc) problem generator (arguments: state, number of facilities, number of customers, number of scenarios, etc.)."
+        description="Realistic stochastic facility location (floc) problem generator and solver (arguments: state, number of facilities, number of customers, number of scenarios, etc.)."
     )
     parser.add_argument(
         "--state", type=str, default="TX", help="Two letter U.S. State id (str)"
@@ -102,11 +57,18 @@ def main():
         help="Mode of operation: 'mps': generate MPS, or 'lp': LP file, 'ef': solve the extensive-form model, 'benders': solve the model with Benders decomposition (default: mps).",
     )
     parser.add_argument(
-        "--solver",
+        "--ef_solver",
         type=str,
         choices=["highs", "gurobi"],
         default="highs",
         help="Which solver to use (default highs).",
+    )
+    parser.add_argument(
+        "--benders_solver",
+        type=str,
+        choices=["cplex", "gurobi"],
+        default="gurobi",
+        help="Which solver to use (default gurobi).",
     )
     parser.add_argument(
         "--relax",
@@ -118,6 +80,11 @@ def main():
         type=str,
         default=".",
         help="Directory for output files (default: current directory).",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Output solver logs and model statistics (default: False).",
     )
     args = parser.parse_args()
 
@@ -131,7 +98,9 @@ def main():
     ieee_limit = args.ieee_limit
     relax = args.relax
     mode = args.mode
-    solver = args.solver
+    ef_solver = args.ef_solver
+    benders_solver = args.benders_solver
+    verbose = args.verbose
 
     # Make sure output directory exists (create it if needed)
     os.makedirs(args.output_dir, exist_ok=True)
@@ -147,41 +116,41 @@ def main():
         ieee_limit,
     )
 
-    # Create the Pyomo model
-    model = floc_model(data)
-
-    # Relax integrality
-    if relax:
-        TransformationFactory("core.relax_integer_vars").apply_to(model)
-
-    # Print out size info of generated model
-    print(f"Generated Model Statistics")
-    print(build_model_size_report(model))
-
     # Handle different modes
     obj_val = None
     if mode in ["mps", "lp"]:
+        # Create the Pyomo model
+        model = floc_model(data, capacity_rule=CapacityRule.MAX)
+        # Relax integrality
+        if relax:
+            TransformationFactory("core.relax_integer_vars").apply_to(model)
+        # Print out size info of generated model
+        print(f"Generated Model Statistics")
+        print(build_model_size_report(model))
         # Write MPS or LP file
         file_name = f"floc_{state}_{num_facilities}_{num_customers}_{num_scenarios}_{cost_per_distance}_{scale_factor}_ieee_{ieee_limit}_relax_{relax}.{mode}"
         file_path = os.path.join(args.output_dir, file_name)
         model.write(file_path)
         print(f"Model written to:\n\t{file_path}")
     elif mode == "ef":
-        # s = SolverFactory(f"appsi_{solver}")
-        s = SolverFactory(f"{solver}")
-        s.solve(model, tee=True)
+        # Create the Pyomo model
+        model = floc_model(data, capacity_rule=CapacityRule.MAX)
+        s = SolverFactory(f"appsi_{ef_solver}")
+        s.solve(model, tee=verbose)
+        print(
+            f"Statistics:\n\tEF Model: {model.nconstraints()} cons, {model.nvariables()} vars"
+        )
         obj_val = get_objective_value(model)
         print(
             f"Extensive form solve of floc_{state}_{num_facilities}_{num_customers}_{num_scenarios}_{cost_per_distance}_{scale_factor}_ieee_{ieee_limit}_relax_{relax}"
         )
     else:
-        model, history = benders_solve(
+        model = benders_solve(
             data,
-            master_solver=f"{solver}",
-            sub_solver=f"{solver}",
-            max_iters=50,
+            capacity_rule=CapacityRule.MAX,
+            solver=f"{benders_solver}",
             tol=1e-6,
-            log=True,
+            verbose=verbose,
         )
         obj_val = get_objective_value(model)
         print(
@@ -190,7 +159,7 @@ def main():
 
     if obj_val is not None:
         print(
-            f"Objective: {get_objective_value(model)} (mode: {mode}, solver: {solver})"
+            f"Objective: {get_objective_value(model)} (mode: {mode}, solver: {ef_solver if mode == 'ef' else benders_solver})"
         )
 
 

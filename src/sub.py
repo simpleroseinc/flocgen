@@ -42,6 +42,14 @@ def build_subproblem_for_scenario(data, scenario, facility_open) -> ConcreteMode
         model.FACILITIES,
         initialize={i: float(facility_open[i]) for i in data["FACILITIES"]},
     )
+    model.production_coeff = Param(
+        model.FACILITIES,
+        model.CUSTOMERS,
+        initialize=data["production_coeff"]["production_coeff"]
+        .xs(scenario, level="SCENARIOS")
+        .to_dict(),
+        within=NonNegativeReals,
+    )
 
     # Variables
     model.production = Var(model.FACILITIES, model.CUSTOMERS, within=NonNegativeReals)
@@ -54,11 +62,14 @@ def build_subproblem_for_scenario(data, scenario, facility_open) -> ConcreteMode
             for j in m.CUSTOMERS
         )
 
-    model.objective = Objective(rule=operating_cost_rule, sense=maximize)
+    model.objective = Objective(rule=operating_cost_rule, sense=minimize)
 
     # Constraints
     def satisfying_customer_demand_rule(m, j):
-        return sum(m.production[i, j] for i in m.FACILITIES) >= m.customer_demand[j]
+        return (
+            sum(m.production_coeff[i, j] * m.production[i, j] for i in m.FACILITIES)
+            >= m.customer_demand[j]
+        )
 
     model.satisfying_customer_demand = Constraint(
         model.CUSTOMERS, rule=satisfying_customer_demand_rule
@@ -66,7 +77,7 @@ def build_subproblem_for_scenario(data, scenario, facility_open) -> ConcreteMode
 
     def facility_capacity_limits_rule(m, i):
         return (
-            sum(m.production[i, j] for j in m.CUSTOMERS)
+            sum(m.production_coeff[i, j] * m.production[i, j] for j in m.CUSTOMERS)
             <= m.facility_capacity[i] * m.facility_open[i]
         )
 
