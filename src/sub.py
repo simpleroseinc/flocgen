@@ -11,8 +11,8 @@ def build_subproblem_for_scenario(data, scenario, facility_open) -> ConcreteMode
     """
     model = ConcreteModel(name=f"FacilityLocation-BendersSubProblem-{scenario}")
     # Create a 'dual' and 'dunbdd` suffix components on the model so the solver plugin will know which suffixes to collect
-    model.dual = Suffix(direction=Suffix.IMPORT)
-    model.dunbdd = Suffix(direction=Suffix.IMPORT_EXPORT)
+    model.dual = Suffix(direction=Suffix.IMPORT, datatype=Suffix.FLOAT)
+    model.dunbdd = Suffix(direction=Suffix.IMPORT_EXPORT, datatype=Suffix.FLOAT)
 
     # Indexing sets
     model.FACILITIES = Set(initialize=data["FACILITIES"])
@@ -38,17 +38,13 @@ def build_subproblem_for_scenario(data, scenario, facility_open) -> ConcreteMode
         within=NonNegativeReals,
     )
     # Benders' parameters
-    model.scenario = Param(initialize=scenario)
     model.facility_open = Param(
         model.FACILITIES,
         initialize={i: float(facility_open[i]) for i in data["FACILITIES"]},
     )
 
     # Variables
-    # Dual variables
-    model.production = Var(
-        model.FACILITIES, model.CUSTOMERS, scenario, within=NonNegativeReals
-    )
+    model.production = Var(model.FACILITIES, model.CUSTOMERS, within=NonNegativeReals)
 
     # Subproblem objective
     def operating_cost_rule(m):

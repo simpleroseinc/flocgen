@@ -79,7 +79,7 @@ def build_master(data, capacity_rule: CapacityRule) -> ConcreteModel:
     def sufficient_production_capacity_rule(m):
         return (
             sum(m.facility_capacity[i] * m.facility_open[i] for i in m.FACILITIES)
-            >= capacity_threshold
+            >= 0  # capacity_threshold
         )
 
     model.sufficient_production_capacity = Constraint(

@@ -167,7 +167,8 @@ def main():
         model.write(file_path)
         print(f"Model written to:\n\t{file_path}")
     elif mode == "ef":
-        s = SolverFactory(f"appsi_{solver}")
+        # s = SolverFactory(f"appsi_{solver}")
+        s = SolverFactory(f"{solver}")
         s.solve(model, tee=True)
         obj_val = get_objective_value(model)
         print(
