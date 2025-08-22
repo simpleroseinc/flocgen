@@ -112,10 +112,10 @@ def main():
 
     if benders_solver == "rose" or ef_solver == "rose":
         try:
-            import appsi_rose
+            from rosepy.pyomo.pyomo_interface import PyomoInterface
         except ImportError as e:
             raise ImportError(
-                "appsi_rose is not installed. Please install it to use the 'rose' solver."
+                "rosepy.pyomo.pyomo_interface is not installed. Please install it to use the 'rose' solver."
             ) from e
 
     # Make sure output directory exists (create it if needed)
