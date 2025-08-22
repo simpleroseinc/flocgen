@@ -6,7 +6,7 @@ from pyomo.environ import *
 
 def build_subproblem_for_scenario(data, scenario, facility_open) -> ConcreteModel:
     """
-    Build the dual LP for scenario s, given a fixed sub_facility_open (dict-like {i:0/1}).
+    Build the LP for scenario s, given a fixed sub_facility_open (dict-like {i:0/1}).
     Returns a Pyomo model ready to be solved.
     """
     model = ConcreteModel(name=f"FacilityLocation-BendersSubProblem-{scenario}")

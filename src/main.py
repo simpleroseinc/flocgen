@@ -33,6 +33,13 @@ def main():
         help="Number of scenarios (int)",
     )
     parser.add_argument(
+        "--capacity_rule",
+        type=str,
+        choices=["max", "min", "average", "expected"],
+        default="max",
+        help="Determine how the capacity threshold for the first-stage constraints should be computed (default: max (i.e. robust solution)).",
+    )
+    parser.add_argument(
         "--cost_per_distance",
         type=positive_float,
         default=1.0,
@@ -52,21 +59,21 @@ def main():
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["mps", "lp", "ef", "benders"],
+        choices=["mps", "lp", "nl", "ef", "benders"],
         default="mps",
-        help="Mode of operation: 'mps': generate MPS, or 'lp': LP file, 'ef': solve the extensive-form model, 'benders': solve the model with Benders decomposition (default: mps).",
+        help="Mode of operation: 'mps': generate MPS, 'lp': LP, or 'nl': NL file; 'ef': solve the extensive-form model, 'benders': solve the model with Benders decomposition (default: mps).",
     )
     parser.add_argument(
         "--ef_solver",
         type=str,
-        choices=["highs", "gurobi"],
+        choices=["gurobi", "highs", "rose"],
         default="highs",
         help="Which solver to use (default highs).",
     )
     parser.add_argument(
         "--benders_solver",
         type=str,
-        choices=["cplex", "gurobi"],
+        choices=["gurobi", "rose"],
         default="gurobi",
         help="Which solver to use (default gurobi).",
     )
@@ -93,6 +100,7 @@ def main():
     num_facilities = args.num_facilities
     num_customers = args.num_customers
     num_scenarios = args.num_scenarios
+    capacity_rule = CapacityRule[args.capacity_rule.upper()]
     cost_per_distance = args.cost_per_distance
     scale_factor = args.scale_factor
     ieee_limit = args.ieee_limit
@@ -101,6 +109,14 @@ def main():
     ef_solver = args.ef_solver
     benders_solver = args.benders_solver
     verbose = args.verbose
+
+    if benders_solver == "rose" or ef_solver == "rose":
+        try:
+            import appsi_rose
+        except ImportError as e:
+            raise ImportError(
+                "appsi_rose is not installed. Please install it to use the 'rose' solver."
+            ) from e
 
     # Make sure output directory exists (create it if needed)
     os.makedirs(args.output_dir, exist_ok=True)
@@ -118,9 +134,9 @@ def main():
 
     # Handle different modes
     obj_val = None
-    if mode in ["mps", "lp"]:
+    if mode in ["mps", "lp", "nl"]:
         # Create the Pyomo model
-        model = floc_model(data, capacity_rule=CapacityRule.MAX)
+        model = floc_model(data, capacity_rule=capacity_rule)
         # Relax integrality
         if relax:
             TransformationFactory("core.relax_integer_vars").apply_to(model)
@@ -134,7 +150,10 @@ def main():
         print(f"Model written to:\n\t{file_path}")
     elif mode == "ef":
         # Create the Pyomo model
-        model = floc_model(data, capacity_rule=CapacityRule.MAX)
+        model = floc_model(data, capacity_rule=capacity_rule)
+        # Relax integrality
+        if relax:
+            TransformationFactory("core.relax_integer_vars").apply_to(model)
         s = SolverFactory(f"appsi_{ef_solver}")
         s.solve(model, tee=verbose)
         print(
@@ -147,7 +166,8 @@ def main():
     else:
         model = benders_solve(
             data,
-            capacity_rule=CapacityRule.MAX,
+            capacity_rule=capacity_rule,
+            relax=relax,
             solver=f"{benders_solver}",
             tol=1e-6,
             verbose=verbose,
@@ -158,6 +178,12 @@ def main():
         )
 
     if obj_val is not None:
+        open_facilities = [
+            f"{i}, {state}"
+            for i in model.FACILITIES
+            if value(model.facility_open[i]) > 0.5
+        ]
+        print(f"Open facilities: {open_facilities}")
         print(
             f"Objective: {get_objective_value(model)} (mode: {mode}, solver: {ef_solver if mode == 'ef' else benders_solver})"
         )

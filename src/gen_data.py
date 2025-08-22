@@ -224,7 +224,7 @@ def compute_demands(
     """
 
     # Compute max and min demand for each customer
-    min_demand_multiplier = 0.5
+    min_demand_multiplier = 0.001
     compute_demand = lambda population: 8000 * math.ceil(population / 100000)
     min_demand = {
         c: (compute_demand(city_population[c]) * min_demand_multiplier)
