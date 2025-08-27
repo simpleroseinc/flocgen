@@ -1,9 +1,9 @@
 # main.py
-from utils import *
 from ef import *
 from pyomo.environ import *
 from pyomo.util.model_size import build_model_size_report
 from benders import benders_solve
+from cb_benders import cb_benders_solve
 
 
 def main():
@@ -59,9 +59,9 @@ def main():
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["mps", "lp", "nl", "ef", "benders"],
+        choices=["mps", "lp", "nl", "ef", "benders", "cb_benders"],
         default="mps",
-        help="Mode of operation: 'mps': generate MPS, 'lp': LP, or 'nl': NL file; 'ef': solve the extensive-form model, 'benders': solve the model with Benders decomposition (default: mps).",
+        help="Mode of operation: 'mps': generate MPS, 'lp': LP, or 'nl': NL file; 'ef': solve the extensive-form model, 'benders': solve the model with Benders decomposition, 'cb_benders': Benders with callbacks on the master problem (default: mps).",
     )
     parser.add_argument(
         "--ef_solver",
@@ -163,7 +163,7 @@ def main():
         print(
             f"Extensive form solve of floc_{state}_{num_facilities}_{num_customers}_{num_scenarios}_{cost_per_distance}_{scale_factor}_ieee_{ieee_limit}_relax_{relax}"
         )
-    else:
+    elif mode == "benders":
         model = benders_solve(
             data,
             capacity_rule=capacity_rule,
@@ -175,6 +175,19 @@ def main():
         obj_val = get_objective_value(model)
         print(
             f"Benders solve of floc_{state}_{num_facilities}_{num_customers}_{num_scenarios}_{cost_per_distance}_{scale_factor}_ieee_{ieee_limit}_relax_{relax}"
+        )
+    else:
+        model = cb_benders_solve(
+            data,
+            capacity_rule=capacity_rule,
+            relax=relax,
+            solver=f"{benders_solver}",
+            tol=1e-6,
+            verbose=verbose,
+        )
+        obj_val = get_objective_value(model)
+        print(
+            f"Callback Benders solve of floc_{state}_{num_facilities}_{num_customers}_{num_scenarios}_{cost_per_distance}_{scale_factor}_ieee_{ieee_limit}_relax_{relax}"
         )
 
     if obj_val is not None:
