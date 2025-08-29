@@ -1,7 +1,7 @@
 # main.py
-from ef import *
-from pyomo.environ import *
 from pyomo.util.model_size import build_model_size_report
+from utils import *
+from ef import *
 from benders import benders_solve
 from cb_benders import cb_benders_solve
 
@@ -9,7 +9,7 @@ from cb_benders import cb_benders_solve
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser(
-        description="Realistic stochastic facility location (floc) problem generator and solver (arguments: state, number of facilities, number of customers, number of scenarios, etc.)."
+        description="Realistic stochastic facility location (floc) problem generator and solver (arguments: mode (solver or generator), state, number of facilities, number of customers, number of scenarios, etc.)."
     )
     parser.add_argument(
         "--state", type=str, default="TX", help="Two letter U.S. State id (str)"
@@ -64,18 +64,17 @@ def main():
         help="Mode of operation: 'mps': generate MPS, 'lp': LP, or 'nl': NL file; 'ef': solve the extensive-form model, 'benders': solve the model with Benders decomposition, 'cb_benders': Benders with callbacks on the master problem (default: mps).",
     )
     parser.add_argument(
-        "--ef_solver",
+        "--solver",
         type=str,
         choices=["gurobi", "highs", "rose"],
         default="highs",
         help="Which solver to use (default highs).",
     )
     parser.add_argument(
-        "--benders_solver",
-        type=str,
-        choices=["gurobi", "rose"],
-        default="gurobi",
-        help="Which solver to use (default gurobi).",
+        "--solver_threads",
+        type=non_negative_int,
+        default=0,
+        help="Number of threads the solver should use (default 0 i.e. automatic).",
     )
     parser.add_argument(
         "--relax",
@@ -106,17 +105,9 @@ def main():
     ieee_limit = args.ieee_limit
     relax = args.relax
     mode = args.mode
-    ef_solver = args.ef_solver
-    benders_solver = args.benders_solver
+    solver = args.solver
+    solver_threads = args.solver_threads
     verbose = args.verbose
-
-    if benders_solver == "rose" or ef_solver == "rose":
-        try:
-            from rosepy.pyomo.pyomo_interface import PyomoInterface
-        except ImportError as e:
-            raise ImportError(
-                "rosepy.pyomo.pyomo_interface is not installed. Please install it to use the 'rose' solver."
-            ) from e
 
     # Make sure output directory exists (create it if needed)
     os.makedirs(args.output_dir, exist_ok=True)
@@ -154,8 +145,8 @@ def main():
         # Relax integrality
         if relax:
             TransformationFactory("core.relax_integer_vars").apply_to(model)
-        s = SolverFactory(f"appsi_{ef_solver}")
-        s.solve(model, tee=verbose)
+        s = get_solver(solver)
+        solve_model(model, s, solver_threads=solver_threads, verbose=verbose)
         print(
             f"Statistics:\n\tEF Model: {model.nconstraints()} cons, {model.nvariables()} vars"
         )
@@ -168,7 +159,7 @@ def main():
             data,
             capacity_rule=capacity_rule,
             relax=relax,
-            solver=f"{benders_solver}",
+            solver=solver,
             tol=1e-6,
             verbose=verbose,
         )
@@ -181,7 +172,7 @@ def main():
             data,
             capacity_rule=capacity_rule,
             relax=relax,
-            solver=f"{benders_solver}",
+            solver=solver,
             tol=1e-6,
             verbose=verbose,
         )
@@ -198,7 +189,7 @@ def main():
         ]
         print(f"Open facilities: {open_facilities}")
         print(
-            f"Objective: {get_objective_value(model)} (mode: {mode}, solver: {ef_solver if mode == 'ef' else benders_solver})"
+            f"Objective: {get_objective_value(model)} (mode: {mode}, solver: {solver})"
         )
 
 

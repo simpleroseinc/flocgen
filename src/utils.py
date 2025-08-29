@@ -1,11 +1,23 @@
 # utils.py
+import os
+import psutil
 import argparse
+import importlib.util
 from enum import Enum
 from gen_data import *
 from pyomo.environ import Objective, ConcreteModel, value
+from pyomo.opt import SolverFactory, SolverResults
+from rosepy.pyomo.pyomo_interface import PyomoInterface
 
 
 # Utility functions
+def is_package_installed(package_name):
+    """
+    Check if a package is installed (used for solvers).
+    """
+    return importlib.util.find_spec(package_name) is not None
+
+
 def validate_state_code(state_code: str) -> str:
     """
     Validate the state code provided by the user.
@@ -27,6 +39,16 @@ def positive_int(val) -> int:
     return ivalue
 
 
+def non_negative_int(val) -> int:
+    """
+    Validate that the value provided by the user is a non-negative integer.
+    """
+    ivalue = int(val)
+    if ivalue < 0:
+        raise argparse.ArgumentTypeError(f"{val} is an invalid non-negative int value")
+    return ivalue
+
+
 def positive_float(val) -> float:
     """
     Validate that the value provided by the user is a positive float.
@@ -35,6 +57,82 @@ def positive_float(val) -> float:
     if fvalue <= 0:
         raise argparse.ArgumentTypeError(f"{val} is an invalid positive float value")
     return fvalue
+
+
+def get_physical_cores():
+    """
+    Get the number of physical CPU cores available on the machine.
+    """
+    try:
+        return psutil.cpu_count(logical=False)
+    except Exception as e:
+        print(f"Error retrieving physical cores: {e}")
+        return None
+
+
+def get_solver(solver_name: str) -> SolverFactory:
+    """
+    Get the solver factory for the specified solver name.
+    """
+    if not is_package_installed(f"{solver_name}py"):
+        raise RuntimeError(f"Solver '{solver_name}' is not installed.")
+    if solver_name == "gurobi":
+        solver = SolverFactory(f"{solver_name}_persistent")
+    elif solver_name == "highs":
+        solver = SolverFactory(f"appsi_{solver_name}")
+    elif solver_name == "rose":
+        solver = SolverFactory(f"{solver_name}")
+    else:
+        raise RuntimeError(f"Invalid solver '{solver_name}' please choose gurobi, highs or rose.")
+    return solver
+
+
+def solve_model(model: ConcreteModel, solver: SolverFactory, solver_threads: int = 0, options: dict = None, verbose: bool = False) -> SolverResults:
+    """
+    Solve the Pyomo model using the specified solver and return the results.
+    """
+    if not isinstance(model, ConcreteModel):
+        raise ValueError("The model must be a ConcreteModel instance.")
+    if not hasattr(solver, "solve") or not callable(getattr(solver, "solve")):
+        raise ValueError("The solver object must have callable attribute 'solve'.")
+    # Try to determine the solver interface name
+    solver_iface_name = getattr(solver.__class__, "__module__", "") or getattr(solver, "__name__", "") or ""
+    if hasattr(solver, "set_instance"): # For some solver interfaces you have to set the instance first before setting options
+        solver.set_instance(model)
+    if hasattr(solver, "set_gurobi_param"):
+        if options:
+            for key, val in options.items():
+                solver.set_gurobi_param(key, val)
+                solver.options[key] = val
+        solver.set_gurobi_param('Threads', solver_threads)
+        solver.set_gurobi_param('OutputFlag', verbose)
+        return solver.solve(model)
+    elif hasattr(solver, "gurobi_options"):
+        if options:
+            for key, val in options.items():
+                solver.gurobi_options[key] = val
+        solver.gurobi_options['Threads'] = solver_threads
+        solver.gurobi_options['OutputFlag'] = verbose
+        solver.config.stream_solver = verbose
+        return solver.solve(model)
+    elif hasattr(solver, "highs_options"):
+        if options:
+            for key, val in options.items():
+                solver.highs_options[key] = val
+        solver.highs_options['threads'] = verbose
+        solver.highs_options['output_flag'] = verbose
+        solver.config.stream_solver = verbose
+        return solver.solve(model)
+    elif "rose" in solver_iface_name:
+        if options:
+            options["rank_burls"] = solver_threads
+            options['solver_engine'] = 'rose_experimental_with_default_presolve'
+        else:
+            options = {"rank_burls": solver_threads,
+                       'solver_engine': 'rose_experimental_with_default_presolve'}
+        return solver.solve(model, options=options)
+    else:
+        raise RuntimeError(f"Solver interface error for: '{solver_iface_name}'.")
 
 
 def get_objective_value(model: ConcreteModel) -> float:
