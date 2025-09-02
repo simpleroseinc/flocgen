@@ -10,9 +10,6 @@ def build_subproblem_for_scenario(data, scenario, facility_open) -> ConcreteMode
     Returns a Pyomo model ready to be solved.
     """
     model = ConcreteModel(name=f"FacilityLocation-BendersSubProblem-{scenario}")
-    # Create a 'dual' and 'dunbdd` suffix components on the model so the solver plugin will know which suffixes to collect
-    #model.dual = Suffix(direction=Suffix.IMPORT, datatype=Suffix.FLOAT)
-    #model.dunbdd = Suffix(direction=Suffix.IMPORT_EXPORT, datatype=Suffix.FLOAT)
 
     # Indexing sets
     model.FACILITIES = Set(initialize=data["FACILITIES"])

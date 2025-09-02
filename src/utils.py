@@ -1,5 +1,7 @@
 # utils.py
 import os
+import sys
+
 import psutil
 import argparse
 import importlib.util
@@ -83,11 +85,19 @@ def get_solver(solver_name: str) -> SolverFactory:
     elif solver_name == "rose":
         solver = SolverFactory(f"{solver_name}")
     else:
-        raise RuntimeError(f"Invalid solver '{solver_name}' please choose gurobi, highs or rose.")
+        raise RuntimeError(
+            f"Invalid solver '{solver_name}' please choose gurobi, highs or rose."
+        )
     return solver
 
 
-def solve_model(model: ConcreteModel, solver: SolverFactory, solver_threads: int = 0, options: dict = None, verbose: bool = False) -> SolverResults:
+def solve_model(
+    model: ConcreteModel,
+    solver: SolverFactory,
+    options: dict = None,
+    solver_threads: int = 0,
+    verbose: bool = False,
+) -> SolverResults:
     """
     Solve the Pyomo model using the specified solver and return the results.
     """
@@ -96,40 +106,48 @@ def solve_model(model: ConcreteModel, solver: SolverFactory, solver_threads: int
     if not hasattr(solver, "solve") or not callable(getattr(solver, "solve")):
         raise ValueError("The solver object must have callable attribute 'solve'.")
     # Try to determine the solver interface name
-    solver_iface_name = getattr(solver.__class__, "__module__", "") or getattr(solver, "__name__", "") or ""
-    if hasattr(solver, "set_instance"): # For some solver interfaces you have to set the instance first before setting options
+    solver_iface_name = (
+        getattr(solver.__class__, "__module__", "")
+        or getattr(solver, "__name__", "")
+        or ""
+    )
+    if hasattr(
+        solver, "set_instance"
+    ):  # For some solver interfaces you have to set the instance first before setting options
         solver.set_instance(model)
     if hasattr(solver, "set_gurobi_param"):
         if options:
             for key, val in options.items():
                 solver.set_gurobi_param(key, val)
                 solver.options[key] = val
-        solver.set_gurobi_param('Threads', solver_threads)
-        solver.set_gurobi_param('OutputFlag', verbose)
+        solver.set_gurobi_param("Threads", solver_threads)
+        solver.set_gurobi_param("OutputFlag", bool(verbose))
         return solver.solve(model)
     elif hasattr(solver, "gurobi_options"):
         if options:
             for key, val in options.items():
                 solver.gurobi_options[key] = val
-        solver.gurobi_options['Threads'] = solver_threads
-        solver.gurobi_options['OutputFlag'] = verbose
+        solver.gurobi_options["Threads"] = solver_threads
+        solver.gurobi_options["OutputFlag"] = verbose
         solver.config.stream_solver = verbose
         return solver.solve(model)
     elif hasattr(solver, "highs_options"):
         if options:
             for key, val in options.items():
                 solver.highs_options[key] = val
-        solver.highs_options['threads'] = verbose
-        solver.highs_options['output_flag'] = verbose
+        solver.highs_options["threads"] = verbose
+        solver.highs_options["output_flag"] = verbose
         solver.config.stream_solver = verbose
         return solver.solve(model)
     elif "rose" in solver_iface_name:
         if options:
             options["rank_burls"] = solver_threads
-            options['solver_engine'] = 'rose_experimental_with_default_presolve'
+            options["solver_engine"] = "rose_experimental_with_default_presolve"
         else:
-            options = {"rank_burls": solver_threads,
-                       'solver_engine': 'rose_experimental_with_default_presolve'}
+            options = {
+                "rank_burls": solver_threads,
+                "solver_engine": "rose_experimental_with_default_presolve",
+            }
         return solver.solve(model, options=options)
     else:
         raise RuntimeError(f"Solver interface error for: '{solver_iface_name}'.")
@@ -216,4 +234,6 @@ def sanity_check_benders_solution(
     rhs = fixed + expected_operating_cost
     gap = abs(obj - rhs) / abs(obj) if abs(obj) >= 1.0 else abs(obj - rhs)
     if gap > tol:
-        raise RuntimeError(f"Decomposition failed: gap={gap} > tol={tol}")
+        raise RuntimeError(
+            f"Decomposition failed: gap={gap} > tol={tol}, master objective:{obj}"
+        )

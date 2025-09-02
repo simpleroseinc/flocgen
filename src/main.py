@@ -160,6 +160,7 @@ def main():
             capacity_rule=capacity_rule,
             relax=relax,
             solver=solver,
+            threads=solver_threads,
             tol=1e-6,
             verbose=verbose,
         )

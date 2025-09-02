@@ -6,23 +6,32 @@ from pyomo.opt import *
 
 def benders_solve(
     data,
-    capacity_rule=CapacityRule.MAX,
-    relax=False,
-    solver="gurobi",
-    max_iters=100,
-    tol=1e-6,
-    verbose=True,
+    capacity_rule: CapacityRule = CapacityRule.MAX,
+    max_iters: int = 100,
+    relax: bool = False,
+    solver: str = "gurobi",
+    threads: int = 1,
+    tol: float = 1e-6,
+    verbose: bool = False,
 ) -> ConcreteModel:
     """
     Multi-cut Benders for the two-stage Stochastic Facility Location problem.
     Returns master_model.
     """
+    # Check arguments
+    tol = abs(tol)
+    if max_iters < 1:
+        raise ValueError("max_iters must be at least 1.")
+
+    # Create master problem
     master = build_master(data=data, capacity_rule=capacity_rule)
-    # Relax integrality
+    # If required by user relax integrality
     if relax:
         TransformationFactory("core.relax_integer_vars").apply_to(master)
-    ms = SolverFactory(solver, solver_io="nl")
-    ss = SolverFactory(solver, solver_io="nl")
+
+    # Set up solvers
+    ms = get_solver(solver)  # Master solver
+    ss = get_solver(solver)  # Subproblem solver
 
     # Solve each scenario and add cuts
     # Assume feasibility or optimality is violated so we enter the loop
@@ -37,7 +46,7 @@ def benders_solve(
         violated = False
         feas_violation = opt_violation = 0
         # Solve master
-        master_result = ms.solve(master, tee=verbose)
+        master_result = solve_model(master, ms, verbose=verbose)
         # Get Master solution (objective, facility_open and sub_variable_cost)
         termination = master_result.solver.termination_condition
         if (
@@ -54,6 +63,20 @@ def benders_solve(
         master_cons = master.nconstraints()
         master_vars = master.nvariables()
 
+        # Helpers to pull dual and dual ray information
+        # (The names 'Pi' and 'FarkasDual' are specific to Gurobi)
+        def dual_on(con):  # valid if optimal
+            try:
+                return float(ss.get_linear_constraint_attr(con, "Pi"))
+            except AttributeError:
+                return 0.0
+
+        def ray_on(con):  # valid if infeasible
+            try:
+                return float(ss.get_linear_constraint_attr(con, "FarkasDual"))
+            except AttributeError:
+                return 0.0
+
         # Reset expected operating cost for this iteration
         expected_operating_cost = 0.0
         for s in master.SCENARIOS:
@@ -63,14 +86,27 @@ def benders_solve(
             sub_cons = sub.nconstraints()
             sub_vars = sub.nvariables()
             # Set options and solve
-            ss_options = {
-                "tech:outlev": int(verbose),
-                "pre:solve": 0,
-                "cvt:pre:all": 0,
-                "alg:method": 1,
-                "alg:rays": 2,
-            }  # Turn off presolve in both the solver and MP driver use dual simplex as the solve method and turn on verbose output
-            sub_result = ss.solve(sub, tee=verbose, options=ss_options)
+            # ss.set_instance(sub)
+            # ss.set_gurobi_param("OutputFlag", bool(verbose))  # Verbose output
+            # ss.set_gurobi_param(
+            #    "InfUnbdInfo", 1
+            # )  # To get unbounded ray information for the dual
+            # ss.set_gurobi_param(
+            #    "Threads", 1
+            # )  # Allows us to farm out each subproblem to a different core if desired
+            # ss.set_gurobi_param(
+            #    "Method", 1
+            # )  # Use dual simplex so we can get Farkas Rays (i.e. direction of unboundedness for the dual) for infeasible primal subproblems
+            # sub_result = ss.solve(sub)
+            options = None
+            if solver == "gurobi":
+                options = {
+                    "InfUnbdInfo": 1,
+                    "Method": 1,
+                }
+            sub_result = solve_model(
+                sub, ss, options=options, solver_threads=threads, verbose=verbose
+            )
             # Get solve results
             termination = sub_result.solver.termination_condition
             termination_name = str(termination)
@@ -78,26 +114,19 @@ def benders_solve(
                 violated = True
                 feas_violation += 1
                 master.BendersCuts.add(
-                    0
-                    <= sum(  # Greater than 0 i.e. <= here b/c we haven't transformed our customer demand rule to <= constraints so we have to flip the sign
-                        (
-                            value(sub.dunbdd[sub.satisfying_customer_demand[i]])
-                            if sub.satisfying_customer_demand[i] in sub.dunbdd
-                            else 0
-                        )
+                    sum(
+                        ray_on(sub.satisfying_customer_demand[i])
                         * value(sub.customer_demand[i])
-                        for i in master.CUSTOMERS
+                        for i in sub.CUSTOMERS
                     )
                     + sum(
-                        (
-                            value(sub.dunbdd[sub.facility_capacity_limits[i]])
-                            if sub.facility_capacity_limits[i] in sub.dunbdd
-                            else 0
-                        )
+                        ray_on(sub.facility_capacity_limits[i])
                         * value(sub.facility_capacity[i])
                         * master.facility_open[i]
-                        for i in master.FACILITIES
+                        for i in sub.FACILITIES
                     )
+                    >= 0 + tol
+                    # Greater than 0 (i.e. >=) here b/c we haven't transformed our customer demand rule to <= constraints so we have to flip the sign
                 )
             elif termination == TerminationCondition.optimal:
                 operating_cost = value(sub.objective)  # subproblem optimal value
@@ -106,18 +135,18 @@ def benders_solve(
                     opt_violation += 1
                     violated = True
                     master.BendersCuts.add(
-                        master.sub_variable_cost[s]
-                        >= sum(
-                            value(sub.dual[sub.satisfying_customer_demand[i]])
+                        sum(
+                            dual_on(sub.satisfying_customer_demand[i])
                             * value(sub.customer_demand[i])
-                            for i in master.CUSTOMERS
+                            for i in sub.CUSTOMERS
                         )
                         + sum(
-                            value(sub.dual[sub.facility_capacity_limits[i]])
+                            dual_on(sub.facility_capacity_limits[i])
                             * value(sub.facility_capacity[i])
                             * master.facility_open[i]
-                            for i in master.FACILITIES
+                            for i in sub.FACILITIES
                         )
+                        <= master.sub_variable_cost[s] - tol
                     )
             else:
                 raise Exception(
@@ -132,8 +161,10 @@ def benders_solve(
             f"{iteration} Statistics:\n\tMaster: {master_cons} cons, {master_vars} vars\n\tSubproblem: {sub_cons} cons, {sub_vars} vars, {len(list(master.SCENARIOS))} scenarios\n\tViolations: {feas_violation} feas, {opt_violation} opt\n\tBounds: {lower_bound:.2f} <= {upper_bound:.2f}"
         )
         if not violated:
+            # Sanity check: master objective value should be equal to fixed cost plus expected subproblem cost
+            sanity_check_benders_solution(master, expected_operating_cost, tol=tol)
             print(f"No violations! Problem converged!")
             break
-    # Sanity check: master objective value should be equal to fixed cost plus expected subproblem cost
-    sanity_check_benders_solution(master, expected_operating_cost, tol=tol)
+    if violated:
+        print(f"Iteration limit reached ({max_iters} iterations) exiting.")
     return master
