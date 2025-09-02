@@ -86,18 +86,6 @@ def benders_solve(
             sub_cons = sub.nconstraints()
             sub_vars = sub.nvariables()
             # Set options and solve
-            # ss.set_instance(sub)
-            # ss.set_gurobi_param("OutputFlag", bool(verbose))  # Verbose output
-            # ss.set_gurobi_param(
-            #    "InfUnbdInfo", 1
-            # )  # To get unbounded ray information for the dual
-            # ss.set_gurobi_param(
-            #    "Threads", 1
-            # )  # Allows us to farm out each subproblem to a different core if desired
-            # ss.set_gurobi_param(
-            #    "Method", 1
-            # )  # Use dual simplex so we can get Farkas Rays (i.e. direction of unboundedness for the dual) for infeasible primal subproblems
-            # sub_result = ss.solve(sub)
             options = None
             if solver == "gurobi":
                 options = {

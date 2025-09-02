@@ -116,28 +116,28 @@ def solve_model(
     ):  # For some solver interfaces you have to set the instance first before setting options
         solver.set_instance(model)
     if hasattr(solver, "set_gurobi_param"):
+        solver.set_gurobi_param("OutputFlag", bool(verbose))
+        solver.set_gurobi_param("Threads", solver_threads)
         if options:
             for key, val in options.items():
                 solver.set_gurobi_param(key, val)
                 solver.options[key] = val
-        solver.set_gurobi_param("Threads", solver_threads)
-        solver.set_gurobi_param("OutputFlag", bool(verbose))
         return solver.solve(model)
     elif hasattr(solver, "gurobi_options"):
+        solver.gurobi_options["OutputFlag"] = verbose
+        solver.gurobi_options["Threads"] = solver_threads
         if options:
             for key, val in options.items():
                 solver.gurobi_options[key] = val
-        solver.gurobi_options["Threads"] = solver_threads
-        solver.gurobi_options["OutputFlag"] = verbose
         solver.config.stream_solver = verbose
         return solver.solve(model)
     elif hasattr(solver, "highs_options"):
+        solver.config.stream_solver = verbose
+        solver.highs_options["output_flag"] = verbose
+        solver.highs_options["threads"] = verbose
         if options:
             for key, val in options.items():
                 solver.highs_options[key] = val
-        solver.highs_options["threads"] = verbose
-        solver.highs_options["output_flag"] = verbose
-        solver.config.stream_solver = verbose
         return solver.solve(model)
     elif "rose" in solver_iface_name:
         if options:
