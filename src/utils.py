@@ -72,14 +72,17 @@ def get_physical_cores():
         return None
 
 
-def get_solver(solver_name: str) -> SolverFactory:
+def get_solver(solver_name: str, callback: bool = False) -> SolverFactory:
     """
     Get the solver factory for the specified solver name.
     """
     if not is_package_installed(f"{solver_name}py"):
         raise RuntimeError(f"Solver '{solver_name}' is not installed.")
     if solver_name == "gurobi":
-        solver = SolverFactory(f"{solver_name}_persistent")
+        if callback:
+            solver = SolverFactory(f"appsi_{solver_name}")
+        else:
+            solver = SolverFactory(f"{solver_name}_persistent")
     elif solver_name == "highs":
         solver = SolverFactory(f"appsi_{solver_name}")
     elif solver_name == "rose":
@@ -94,6 +97,7 @@ def get_solver(solver_name: str) -> SolverFactory:
 def solve_model(
     model: ConcreteModel,
     solver: SolverFactory,
+    callback: callable = None,
     options: dict = None,
     solver_threads: int = 0,
     verbose: bool = False,
@@ -113,15 +117,16 @@ def solve_model(
     )
     if hasattr(
         solver, "set_instance"
-    ):  # For some solver interfaces you have to set the instance first before setting options
+    ):  # For some solver interfaces you have to set the instance first before setting callbacks or options
         solver.set_instance(model)
+    if hasattr(solver, "set_callback") and callback:
+        solver.set_callback(callback)
     if hasattr(solver, "set_gurobi_param"):
         solver.set_gurobi_param("OutputFlag", bool(verbose))
         solver.set_gurobi_param("Threads", solver_threads)
         if options:
             for key, val in options.items():
                 solver.set_gurobi_param(key, val)
-                solver.options[key] = val
         return solver.solve(model)
     elif hasattr(solver, "gurobi_options"):
         solver.gurobi_options["OutputFlag"] = verbose

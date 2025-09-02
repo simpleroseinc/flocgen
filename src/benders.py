@@ -32,6 +32,10 @@ def benders_solve(
     # Set up solvers
     ms = get_solver(solver)  # Master solver
     ss = get_solver(solver)  # Subproblem solver
+    if not hasattr(ss, "get_linear_constraint_attr"):
+        raise RuntimeError(
+            f"Solver '{solver}' does not support dual or ray extraction needed for Benders decomposition."
+        )
 
     # Solve each scenario and add cuts
     # Assume feasibility or optimality is violated so we enter the loop
@@ -89,8 +93,8 @@ def benders_solve(
             options = None
             if solver == "gurobi":
                 options = {
-                    "InfUnbdInfo": 1,
-                    "Method": 1,
+                    "InfUnbdInfo": 1,  # To get unbounded ray information for the dual of the primal problem
+                    "Method": 1,  # Use dual simplex so we can get Farkas Rays (i.e. direction of unboundedness for the dual) for infeasible primal subproblems
                 }
             sub_result = solve_model(
                 sub, ss, options=options, solver_threads=threads, verbose=verbose
