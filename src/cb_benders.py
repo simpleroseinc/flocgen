@@ -37,13 +37,6 @@ def cb_benders_solve(
         facility_open = {i: value(mod.facility_open[i]) for i in mod.FACILITIES}
         sub_variable_cost = {s: value(mod.sub_variable_cost[s]) for s in mod.SCENARIOS}
 
-        # Initialize the subproblem solver
-        ss = get_solver(solver)
-        if not hasattr(ss, "get_linear_constraint_attr"):
-            raise RuntimeError(
-                f"Solver '{solver}' does not support dual or ray extraction needed for Benders decomposition."
-            )
-
         # Helpers to pull dual and dual ray information
         # (The names 'Pi' and 'FarkasDual' are specific to Gurobi)
         def dual_on(con):  # valid if optimal
@@ -65,20 +58,15 @@ def cb_benders_solve(
         sub_cons = sub_vars = 0
         expected_operating_cost = 0.0
         for s in mod.SCENARIOS:
-            # Build subproblem for scenario s with fixed facility_open from master solution
-            sub = build_subproblem_for_scenario(data, s, facility_open)
+            # Get subproblem and solver for scenario s
+            sub = sub_problems[s]
+            ss = sub_solvers[s]
             # Get subproblem statistics
             sub_cons, sub_vars = sub.nconstraints(), sub.nvariables()
-            # Set options and solve
-            options = None
-            if solver == "gurobi":
-                options = {
-                    "InfUnbdInfo": 1,  # To get unbounded ray information for the dual of the primal problem
-                    "Method": 1,  # Use dual simplex so we can get Farkas Rays (i.e. direction of unboundedness for the dual) for infeasible primal subproblems
-                }
-            sub_result = solve_model(
-                sub, ss, options=options, solver_threads=threads, verbose=verbose
-            )
+            # Update subproblem with fixed facility_open from master solution
+            set_sub_probelm_rhs(sub, ss, facility_open)
+            # Solve subproblem
+            sub_result = ss.solve(sub)
             # Get solve results
             termination = sub_result.solver.termination_condition
             termination_name = str(termination)
@@ -143,17 +131,48 @@ def cb_benders_solve(
     ms = get_solver(solver, callback=True)
     if not hasattr(ms, "set_callback"):
         raise RuntimeError(f"solver '{solver}' does not accept callbacks.")
+    master_options = None
     if solver == "gurobi":
-        options = {
+        master_options = {
             "PreCrush": 1,  # Required so user added constraints can be applied to presolved model
             "LazyConstraints": 1,  # Enable lazy constraints so we can add Benders cuts
             "TimeLimit": max_time,
         }
+    # Prebuild one sub-problem model and one persistent solver per scenario
+    sub_problems = {}
+    sub_solvers = {}
+
+    # Set subproblem solver options
+    sub_options = None
+    if solver == "gurobi":
+        sub_options = {
+            "InfUnbdInfo": 1,  # To get unbounded ray information for the dual of the primal problem
+            "Method": 1,  # Use dual simplex so we can get Farkas Rays (i.e. direction of unboundedness for the dual) for infeasible primal subproblems
+        }
+    for s in master.SCENARIOS:
+        sub = build_subproblem_for_scenario(
+            data, s, {i: 0.0 for i in data["FACILITIES"]}
+        )
+        sub_problems[s] = sub
+        ss = get_solver(solver)
+        if not hasattr(ss, "get_linear_constraint_attr"):
+            raise RuntimeError(
+                f"Solver '{solver}' does not support dual or ray extraction needed for Benders decomposition."
+            )
+        sub_solvers[s] = ss
+        setup_benders_sub_solver(
+            sub_problems[s],
+            sub_solvers[s],
+            options=sub_options,
+            solver_threads=threads,
+            verbose=verbose,
+        )
+
     _ = solve_model(
         master,
         ms,
         callback=benders_callback,
-        options=options,
+        options=master_options,
         solver_threads=threads,
         verbose=verbose,
     )

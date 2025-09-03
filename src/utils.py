@@ -94,6 +94,60 @@ def get_solver(solver_name: str, callback: bool = False) -> SolverFactory:
     return solver
 
 
+def setup_benders_sub_solver(
+    model: ConcreteModel,
+    solver: SolverFactory,
+    callback: callable = None,
+    options: dict = None,
+    solver_threads: int = 0,
+    verbose: bool = False,
+) -> None:
+    """
+    Prep the solver for Benders using the specified solver.
+    """
+    if not isinstance(model, ConcreteModel):
+        raise ValueError("The model must be a ConcreteModel instance.")
+    if not hasattr(solver, "solve") or not callable(getattr(solver, "solve")):
+        raise ValueError("The solver object must have callable attribute 'solve'.")
+    # Try to determine the solver interface name
+    solver_iface_name = (
+        getattr(solver.__class__, "__module__", "")
+        or getattr(solver, "__name__", "")
+        or ""
+    )
+    if hasattr(
+        solver, "set_instance"
+    ):  # For some solver interfaces you have to set the instance first before setting callbacks or options
+        solver.set_instance(model)
+    if hasattr(solver, "set_callback") and callback:
+        solver.set_callback(callback)
+    if hasattr(solver, "set_gurobi_param"):
+        solver.set_gurobi_param("OutputFlag", bool(verbose))
+        solver.set_gurobi_param("Threads", solver_threads)
+        if options:
+            for key, val in options.items():
+                solver.set_gurobi_param(key, val)
+        return
+    elif hasattr(solver, "gurobi_options"):
+        solver.gurobi_options["OutputFlag"] = verbose
+        solver.gurobi_options["Threads"] = solver_threads
+        if options:
+            for key, val in options.items():
+                solver.gurobi_options[key] = val
+        solver.config.stream_solver = verbose
+        return
+    elif hasattr(solver, "highs_options"):
+        solver.config.stream_solver = verbose
+        solver.highs_options["output_flag"] = verbose
+        solver.highs_options["threads"] = solver_threads
+        if options:
+            for key, val in options.items():
+                solver.highs_options[key] = val
+        return
+    else:
+        raise RuntimeError(f"Solver interface error for: '{solver_iface_name}'.")
+
+
 def solve_model(
     model: ConcreteModel,
     solver: SolverFactory,

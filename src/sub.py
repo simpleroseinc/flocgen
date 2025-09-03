@@ -4,6 +4,13 @@
 from pyomo.environ import *
 
 
+def set_sub_probelm_rhs(sub, ss, facility_open):
+    for i in sub.FACILITIES:
+        rhs = float(value(sub.facility_capacity[i]) * facility_open[i])
+        gcon = ss._pyomo_con_to_solver_con_map[sub.facility_capacity_limits[i]]
+        gcon.RHS = rhs
+
+
 def build_subproblem_for_scenario(data, scenario, facility_open) -> ConcreteModel:
     """
     Build the LP for scenario s, given a fixed sub_facility_open (dict-like {i:0/1}).
