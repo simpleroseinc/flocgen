@@ -4,6 +4,7 @@ from utils import *
 from ef import *
 from benders import benders_solve
 from cb_benders import cb_benders_solve
+import multiprocessing as mp
 
 
 def main():
@@ -195,4 +196,5 @@ def main():
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn", force=True)
     main()

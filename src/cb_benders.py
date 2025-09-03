@@ -24,7 +24,10 @@ def cb_benders_solve(
 
     # Define callback function that will be called by the solver for each incumbent
     def benders_callback(mod, sol, where):
-        # If no incumbent solution, do nothing
+        """
+        Gurobi specific callback to add Benders cuts for each incumbent solution.
+        """
+        # If no incumbent solution, do nothing (Gurobi specific)
         if where != GRB.Callback.MIPSOL:
             return
 
@@ -116,6 +119,7 @@ def cb_benders_solve(
             file=sys.__stdout__,
             flush=True,
         )
+        return
 
     # Check arguments
     tol = abs(tol)
