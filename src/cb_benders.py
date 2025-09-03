@@ -28,12 +28,8 @@ def cb_benders_solve(
         if where != GRB.Callback.MIPSOL:
             return
 
-        # Increment counter for every incumbent solution
-        nonlocal num_incumbent
-        num_incumbent += 1
         # Get master problem statistics
-        master_cons = mod.nconstraints()
-        master_vars = mod.nvariables()
+        master_cons, master_vars = mod.nconstraints(), mod.nvariables()
         # Get master incumbent solution (facility_open and sub_variable_cost)
         sol.cbGetSolution(
             vars=list(mod.component_data_objects(Var, active=True, descend_into=True))
@@ -62,14 +58,17 @@ def cb_benders_solve(
             except AttributeError:
                 return 0.0
 
-        # Reset expected operating cost for this incumbent
+        # Per-incumbent stats
+        nonlocal num_incumbent
+        num_incumbent += 1
+        feas_violation = opt_violation = 0
+        sub_cons = sub_vars = 0
         expected_operating_cost = 0.0
         for s in mod.SCENARIOS:
             # Build subproblem for scenario s with fixed facility_open from master solution
             sub = build_subproblem_for_scenario(data, s, facility_open)
             # Get subproblem statistics
-            sub_cons = sub.nconstraints()
-            sub_vars = sub.nvariables()
+            sub_cons, sub_vars = sub.nconstraints(), sub.nvariables()
             # Set options and solve
             options = None
             if solver == "gurobi":
@@ -85,6 +84,7 @@ def cb_benders_solve(
             termination_name = str(termination)
 
             if termination == TerminationCondition.infeasible:
+                feas_violation += 1
                 lhs = sum(
                     ray_on(sub.satisfying_customer_demand[i])
                     * value(sub.customer_demand[i])
@@ -101,6 +101,7 @@ def cb_benders_solve(
                 operating_cost = value(sub.objective)  # subproblem optimal value
                 expected_operating_cost += value(mod.prob[s]) * operating_cost
                 if operating_cost > sub_variable_cost[s] + tol:
+                    opt_violation += 1
                     lhs = sum(
                         dual_on(sub.satisfying_customer_demand[i])
                         * value(sub.customer_demand[i])
@@ -121,8 +122,10 @@ def cb_benders_solve(
         # Update upper bound
         fixed = sum(value(mod.fixed_cost[i]) * facility_open[i] for i in mod.FACILITIES)
         upper_bound = fixed + expected_operating_cost
+        lower_bound = get_objective_value(mod)
         print(
-            f"{iteration} Statistics:\n\tMaster: {master_cons} cons, {master_vars} vars\n\tSubproblem: {sub_cons} cons, {sub_vars} vars, {len(list(mod.SCENARIOS))} scenarios\n\tViolations: {feas_violation} feas, {opt_violation} opt\n\tBounds: {lower_bound:.2f} <= {upper_bound:.2f}",
+            f"{num_incumbent} Statistics:\n\tMaster: {master_cons} cons, {master_vars} vars\n\tSubproblem: {sub_cons} cons, {sub_vars} vars, {len(list(mod.SCENARIOS))} scenarios\n\tViolations: {feas_violation} feas, {opt_violation} opt\n\tBounds: {lower_bound:.2f} <= {upper_bound:.2f}",
+            file=sys.__stdout__,
             flush=True,
         )
 
