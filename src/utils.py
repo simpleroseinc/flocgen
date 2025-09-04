@@ -61,7 +61,7 @@ def positive_float(val) -> float:
     return fvalue
 
 
-def get_physical_cores():
+def get_physical_cores() -> int | None:
     """
     Get the number of physical CPU cores available on the machine.
     """

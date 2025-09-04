@@ -5,7 +5,7 @@ from pyomo.opt import TerminationCondition
 from sub import build_subproblem_for_scenario, set_sub_probelm_rhs
 from utils import get_solver, setup_benders_sub_solver, solve_model
 
-# Process-local cache & configuration
+# Configuration and cache local to each worker process
 sub_solver_ctx: Dict[str, Any] = {
     "data": None,  # full 'data' dict used to create subproblems
     "solver_name": None,  # e.g., "gurobi"
@@ -40,11 +40,10 @@ def solve_sub(
 ) -> Tuple[str, str, Any, Dict[str, int], float | None, Dict[Any, float], float | None]:
     """
     Solve ONE scenario subproblem for the given incumbent 'facility_open'.
-
     Returns a tuple describing the cut:
-      - ("feas", s, const, {i: coeff_i}, None)              -> feasibility cut: const + Σ coeff_i * x_i >= 0
-      - ("opt",  s, const, {i: coeff_i}, operating_cost)    -> optimality cut: θ_s >= const + Σ coeff_i * x_i
-      - ("other", s, status_string, {}, None)               -> anything else (e.g., time limit), you decide policy
+      - ("feas", termination, s, stats, const, {i: coeff_i}, None)             -> feasibility cut: const + Σ coeff_i * x_i >= 0
+      - ("opt", termination, s, stats, const, {i: coeff_i}, operating_cost)    -> optimality cut: const + Σ coeff_i * x_i <= operating_cost
+      - ("other", termination, s, stats, None, {}, None)                       -> anything else (e.g., time limit)
     """
     data = sub_solver_ctx["data"]
     solver_name = sub_solver_ctx["solver_name"]
@@ -53,7 +52,7 @@ def solve_sub(
     threads = sub_solver_ctx["threads"]
     cache: Dict[Any, tuple] = sub_solver_ctx["cache"]
 
-    # Build once per process per scenario; then reuse and just update RHS
+    # Build once per scenario (i.e. process); then reuse and just update RHS
     if scenario not in cache:
         sub = build_subproblem_for_scenario(data, scenario, facility_open)
         ss = get_solver(solver_name)  # persistent for Gurobi
@@ -67,8 +66,9 @@ def solve_sub(
         cache[scenario] = (sub, ss)
     else:
         sub, ss = cache[scenario]
-        # Your function to refresh RHS under the new incumbent
+        # Update RHS with new incumbent
         set_sub_probelm_rhs(sub, ss, facility_open)
+
     # Collect statistics
     stats = {"sub_cons": sub.nconstraints(), "sub_vars": sub.nvariables()}
     # Solve (persistent path)
@@ -96,11 +96,12 @@ def solve_sub(
             return 0.0
 
     if termination == TerminationCondition.infeasible:
-        # Coefficents for feasibility cut
+        # Constant for feasibility cut
         feas_const = sum(
             ray_on(sub.satisfying_customer_demand[j]) * value(sub.customer_demand[j])
             for j in sub.CUSTOMERS
         )
+        # Coefficents for feasibility cut
         feas_coeffs = {
             i: ray_on(sub.facility_capacity_limits[i]) * value(sub.facility_capacity[i])
             for i in sub.FACILITIES
@@ -116,11 +117,12 @@ def solve_sub(
         )
 
     if termination == TerminationCondition.optimal:
-        # Coefficients for optimality cut
+        # Constant for optimality cut
         opt_const = sum(
             dual_on(sub.satisfying_customer_demand[j]) * value(sub.customer_demand[j])
             for j in sub.CUSTOMERS
         )
+        # Coefficients for optimality cut
         opt_coeffs = {
             i: dual_on(sub.facility_capacity_limits[i])
             * value(sub.facility_capacity[i])

@@ -1,10 +1,11 @@
 # benders.py
 import multiprocessing as mp
-from time import sleep
 from pyomo.opt import *
+from time import sleep
 from master import *
 from sub import *
 from sub_solver import *
+from utils import *
 
 
 def benders_solve(
@@ -19,6 +20,7 @@ def benders_solve(
 ) -> ConcreteModel:
     """
     Multi-cut Benders for the two-stage Stochastic Facility Location problem.
+    Master problem is resolved from scratch each iteration.
     Returns master_model.
     """
     # Check arguments
@@ -31,8 +33,8 @@ def benders_solve(
     # If required by user relax integrality
     if relax:
         TransformationFactory("core.relax_integer_vars").apply_to(master)
-    # Set up solvers
-    ms = get_solver(solver)  # Master solver
+    # Set up master solver
+    ms = get_solver(solver)
 
     # Set up for parallel subproblem solves
     num_scenarios = len(list(master.SCENARIOS))
@@ -46,28 +48,25 @@ def benders_solve(
         )
         sleep(5)  # Give user a chance to see the warning
     ctx = mp.get_context("spawn")
-    sub_options = None
+    sub_options = None  # Options will differ based on solver
     if solver == "gurobi":
         sub_options = {
             "InfUnbdInfo": 1,  # To get unbounded ray information for the dual of the primal problem
             "Method": 1,
             # Use dual simplex so we can get Farkas Rays (i.e. direction of unboundedness for the dual) for infeasible primal subproblems
         }
-    pool = ctx.Pool(
+
+    # Solve each scenario subproblem in parallel
+    # Apply cuts to master based on subproblem results
+    violated = True  # Assume feasibility or optimality is violated so we enter the loop
+    iteration = 0
+    with ctx.Pool(
         processes=num_scenarios,
         initializer=sub_solver_init,
         initargs=(data, solver, sub_options, threads, verbose),
         maxtasksperchild=max_iters,
-    )
+    ) as pool:
 
-    # Solve each scenario subproblem in parallel
-    # Apply cuts to master based on subproblem results
-    try:
-        # Assume feasibility or optimality is violated so we enter the loop
-        violated = True
-        iteration = 0
-        expected_operating_cost = 0.0
-        upper_bound = float("inf")
         while violated and iteration < max_iters:
             # Increment iteration counter
             iteration += 1
@@ -75,8 +74,10 @@ def benders_solve(
             violated = False
             feas_violation = opt_violation = 0
             # Solve master
-            master_result = solve_model(master, ms, verbose=verbose)
-            # Get Master solution (objective, facility_open and sub_variable_cost)
+            master_result = solve_model(
+                master, ms, solver_threads=threads, verbose=verbose
+            )
+            # Get Master solution (facility_open and sub_variable_cost)
             termination = master_result.solver.termination_condition
             if (
                 termination == TerminationCondition.infeasible
@@ -167,11 +168,6 @@ def benders_solve(
                 sanity_check_benders_solution(master, expected_operating_cost, tol=tol)
                 print(f"No violations! Problem converged!")
                 break
-        if violated:
-            print(f"Iteration limit reached ({max_iters} iterations) exiting.")
-        return master
-
-    # Clean up pool
-    finally:
-        pool.close()
-        pool.join()
+    if violated:
+        print(f"Iteration limit reached ({max_iters} iterations) exiting.")
+    return master

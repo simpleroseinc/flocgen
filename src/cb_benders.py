@@ -1,11 +1,11 @@
 # cb_benders.py
-import sys
-from time import sleep
 import multiprocessing as mp
 from gurobipy import GRB
 from pyomo.environ import Var
 from pyomo.contrib import appsi
 from pyomo.opt import TerminationCondition
+import sys
+from time import sleep
 from master import *
 from sub import *
 from sub_solver import *
@@ -23,6 +23,8 @@ def cb_benders_solve(
 ) -> ConcreteModel:
     """
     Multi-cut Benders for the two-stage Stochastic Facility Location problem.
+    We're solving the master problem once. However, for each incumbent of the master problem
+    we solve the subproblems and add lazy constraints based on the results.
     Returns master_model.
     """
 
@@ -40,7 +42,7 @@ def cb_benders_solve(
     ms = get_solver(solver, callback=True)
     if not hasattr(ms, "set_callback"):
         raise RuntimeError(f"solver '{solver}' does not accept callbacks.")
-    master_options = None
+    master_options = None  # Options will differ based on solver
     if solver == "gurobi":
         master_options = {
             "PreCrush": 1,  # Required so user added constraints can be applied to presolved model
@@ -61,7 +63,7 @@ def cb_benders_solve(
         )
         sleep(5)  # Give user a chance to see the warning
     ctx = mp.get_context("spawn")
-    sub_options = None
+    sub_options = None  # Options will differ based on solver
     if solver == "gurobi":
         sub_options = {
             "InfUnbdInfo": 1,  # To get unbounded ray information for the dual of the primal problem

@@ -5,6 +5,9 @@ from pyomo.environ import *
 
 
 def set_sub_probelm_rhs(sub, ss, facility_open):
+    """
+    Given facility_open (dict-like {i:0/1}), update the RHS of the subproblem constraints.
+    """
     for i in sub.FACILITIES:
         rhs = float(value(sub.facility_capacity[i]) * facility_open[i])
         gcon = ss._pyomo_con_to_solver_con_map[sub.facility_capacity_limits[i]]
