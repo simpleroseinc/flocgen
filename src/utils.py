@@ -144,6 +144,10 @@ def setup_benders_sub_solver(
             for key, val in options.items():
                 solver.highs_options[key] = val
         return
+    elif "rose" in solver_iface_name:
+        if options:
+            options["rank_burls"] = solver_threads
+        return
     else:
         raise RuntimeError(f"Solver interface error for: '{solver_iface_name}'.")
 
