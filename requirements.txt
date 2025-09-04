@@ -1,6 +1,37 @@
+annotated-types
+black
+certifi
+charset-normalizer
+click
 gurobipy
 highspy
+idna
+markdown-it-py
+mdurl
+mypy_extensions
 numpy
+packaging
 pandas
 pandas-stubs
+pathspec
+platformdirs
+ply
+psutil
+pydantic
+pydantic_core
+Pygments
+PyJWT
 pyomo
+python-dateutil
+pytz
+requests
+rich
+rose.types @ https://simplerose-packages-public.s3.us-east-2.amazonaws.com/rose_types/release/rose_types-0.12.0-py3-none-any.whl#sha256=ba79579c1fe0ef7391e6535c4547e2f4c42b3ce283799b35a696dfaf03a446de
+rosepy @ https://simplerose-packages-public.s3.us-east-2.amazonaws.com/rosepy/release/rosepy-0.12.0-py3-none-any.whl#sha256=bd5a6063b5b7f5e2852e5123620202f5dca5aaed1805c0e2053f868d293bffc4
+setuptools
+six
+typing-inspection
+typing_extensions
+tzdata
+urllib3
+websockets
