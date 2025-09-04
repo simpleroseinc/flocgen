@@ -110,12 +110,12 @@ If scaling is turned on, the production and facility variables as well as the de
 
 
 ## Brief description of architecture
-- [gen_data.py](src/gen_data.py): reads city data and builds a data dict: sets, costs, capacities, scenario demands, production coefficients. ￼
-- [ef.py](src/ef.py): builds the Extensive Form Pyomo model. ￼
+- [gen_data.py](src/gen_data.py): reads city data and builds a data dict: sets, costs, capacities, scenario demands, production coefficients.
+- [ef.py](src/ef.py): builds the Extensive Form Pyomo model.
 - [master.py](src/master.py): builds the Benders master (first-stage binary + operating costs per scenario + capacity rule constraint).
-- [sub.py](src/sub.py): builds a scenario subproblem and exposes `set_sub_probelm_rhs` to update the RHS as the master solution changes. ￼
-- [sub_solver.py](src/sub_solver.py): worker-side cache + solve_sub() that solves one scenario with a persistent solver and returns constants and coefficients needed to build the cuts (feas/opt) for the master problem. ￼
-- [benders.py](src/benders.py): looped Benders (master re-solve each iteration). Parallel sub-solves via a spawn pool; add cuts to ConstraintList in master.￼
-- [cb_benders.py](src/cb_benders.py): callback Benders (single master with lazy constraints). Parallel sub-solves per incumbent, return cuts, and add them as lazy constraints in master. 
-- [utils.py](src/utils.py): solver adapters (APPSI/persistent/rose), common solve wrapper, capacity-rule math, sanity checks, and CPU/threads helpers. ￼
-- [main.py](src/main.py): CLI and end-to-end orchestration. Sets multiprocessing spawn start-method for safety with threaded solvers. 
+- [sub.py](src/sub.py): builds a scenario subproblem and exposes `set_sub_probelm_rhs` to update the RHS as the master solution changes.
+- [sub_solver.py](src/sub_solver.py): worker-side cache + solve_sub() that solves one scenario with a persistent solver and returns constants and coefficients needed to build the cuts (feas/opt) for the master problem.
+- [benders.py](src/benders.py): looped Benders (master re-solve each iteration). Parallel sub-solves via a spawn pool; add cuts to ConstraintList in master.
+- [cb_benders.py](src/cb_benders.py): callback Benders (single master with lazy constraints). Parallel sub-solves per incumbent, return cuts, and add them as lazy constraints in master.
+- [utils.py](src/utils.py): solver adapters (APPSI/persistent/rose), common solve wrapper, capacity-rule math, sanity checks, and CPU/threads helpers.
+- [main.py](src/main.py): CLI and end-to-end orchestration. Sets multiprocessing spawn start-method for safety with threaded solvers.
