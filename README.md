@@ -1,19 +1,45 @@
-# Stochastic Facility Location Problem Generator
-This repository contains Python scripts that can generate stochastic facility location problems based on U.S. cities.
+# Stochastic Facility Location — Generator & Solvers
+This project began as a simple stochastic facility location generator, and evolved into a small "Benders Decomposition Lab" intended for learning and experimentation. 
+You can:
+
+- Generate MPS/LP/NL instances for any U.S. state
+- Solve the generated problem in three ways:
+  1. Extensive Form (ef) — solve the full mixed-integer model 
+  2. Benders Decomposition (benders) — re-solve the master at each iteration; subproblem solves are in parallel 
+  3. Benders Decomposition w/ callbacks (cb_benders) — solve one master with lazy cuts; subproblem solves are in parallel
+
+This code prioritizes clarity over micro-optimizations and is meant as an educational reference.
 
 ## TL;DR
 
 - **Install:**
    ```bash
+   git clone <this-repo>
+   cd <repo-root>
    pip install -r requirements.txt
    ```
-- **Usage:** Generate a problem where you try to choose which of 3 facilities to open in the state of Texas given 10 customers, 3 potential levels of future demand, where the transportation cost per distance is 3.14, a scale factor of 1.0 (i.e., **no scaling** is applied to the problem), and we are **not** pushing values to IEEE representation limits:
-   ```sh
-   cd src/
-   python pyomo_gen_floc.py --state TX --num_facilities 3 --num_customers 10 --num_scenarios 3 --cost_per_distance 3.14 --scale_factor 1.0 --ieee_limit False
-   ```
-- **Output:** A `.mps` file containing the model and data.
-- **Note:** You can relax integrality by passing the `--relax` flag.
+- **Usage:** 
+  - <u>Generate a problem</u> (`.mps`, `.lp`, or `.nl` file format) where you try to choose which of 3 facilities to open in the state of Texas given 10 customers, 3 potential levels of future demand, where the transportation cost per distance is 3.14, a scale factor of 1.0 (i.e., **no scaling** is applied to the problem), and we are **not** pushing values to IEEE representation limits:
+      ```sh
+      cd src/
+      python main.py --mode mps --state TX --num_facilities 3 --num_customers 10 --num_scenarios 3 --cost_per_distance 3.14 --scale_factor 1.0 --ieee_limit
+      python main.py --mode lp --state TX --num_facilities 3 --num_customers 10 --num_scenarios 3 --cost_per_distance 3.14 --scale_factor 1.0 --ieee_limit
+      python main.py --mode nl --state TX --num_facilities 3 --num_customers 10 --num_scenarios 3 --cost_per_distance 3.14 --scale_factor 1.0 --ieee_limit
+      ```
+    - Output: An `.mps`, `.lp`, or `.nl` file containing the model and data.
+    - Note: You can relax integrality by passing the `--relax` flag.
+  - <u>Solve the extensive form</u> of a problem with 5 facilities, 25 customers, and 3 scenarios in California with `rose` solver:
+       ```sh
+       python main.py --mode ef --solver rose --state CA --num_facilities 5 --num_customers 25 --num_scenarios 3
+       ```
+  - <u>Solve with Benders</u> and limit solver threads to 1:
+       ```sh
+       python main.py --mode benders --solver gurobi --solver_threads 1 --state CA --num_facilities 5 --num_customers 25 --num_scenarios 3
+       ```
+  - <u>Solve with callback Benders</u> change capacity limit in master to be minimal:
+       ```sh
+       python main.py --mode cb_benders --solver gurobi --solver_threads 1 --state CA --num_facilities 5 --num_customers 25 --num_scenarios 3 --capacity_rule min
+       ```
 
 
 ## Problem description
@@ -59,15 +85,21 @@ The extensive form of our stochastic program can be formulated as follows:
 
 
 ## Pyomo Model
-The model is encoded in the [pyomo_floc.py](src/pyomo_floc.py) file, which contains a function that instantiates the model given data generated based on the user's input.
+The extensive-form model is encoded in the [ef.py](src/ef.py) file, which contains a function that instantiates the model given data generated based on the user's input.
+In a similar manner to the EF the models for the Benders Decomposition are implemented in [master.py](src/master.py) and [sub.py](src/sub.py).
+Both Benders methods ([benders.py](src/benders.py), [cb_benders.py](src/benders.py)) rely on the models implemented in `master.py` and `sub.py`. 
 
 
 ## Generator
-The [pyomo_gen_floc.py](src/pyomo_gen_floc.py) script generates data based on user input and creates a dictionary that is passed to the model instantiation function in [pyomo_floc.py](src/pyomo_floc.py) to instantiate the model.
+The [gen_data.py](src/gen_data.py) script generates data based on user input and creates a dictionary that is passed to the model instantiation function in [ef.py](src/ef.py), [master.py](src/master.py), and [sub.py](src/sub.py) to instantiate the model.
 
-Users can select the state they would like to work in, the number of facilities to consider for supplying products to customers, and the number of cities where customers demanding the products are located. Additionally, users can choose the number of different demand scenarios to incorporate into the model. Finally, they can specify the transportation costs and whether to scale or push the parameter values to IEEE representation limits.
+Users can select the state they would like to work in, the number of facilities to consider for supplying products to customers, and the number of cities where customers demanding the products are located. 
+Additionally, users can choose the number of different demand scenarios and capacity constraints to incorporate into the model. 
+Finally, they can specify the transportation costs and whether to scale or push the parameter values to IEEE representation limits.
 
-The generator will then pick the most populous cities in the state for facilities (data is obtained by parsing the [uscities.csv](data/uscities.csv) file). For example, if the user chooses 7 facilities, the 7 most populous cities will be selected as potential distribution facilities. The remaining cities will be considered for customer locations. For example, if the user decides to have 70 customer locations, the 8th to the 77th most populous cities will be picked as customer locations.
+The generator will then pick the most populous cities in the state for facilities (data is obtained by parsing the [uscities.csv](data/uscities.csv) file). 
+For example, if the user chooses 7 facilities, the 7 most populous cities will be selected as potential distribution facilities. 
+The remaining cities will be considered for customer locations. For example, if the user decides to have 70 customer locations, the 8th to the 77th most populous cities will be picked as customer locations.
 
 Fixed costs for facilities are computed based on population: the more populated a city, the more expensive it is to open a facility. Variable costs, i.e., transportation costs, are computed based on the Haversine distance, which is then multiplied by the cost per distance input.
 
@@ -75,3 +107,15 @@ Demand and capacity parameters are also computed based on the population of the 
 
 ### Scaling
 If scaling is turned on, the production and facility variables as well as the demand are multiplied by the scale factor. You can think of this as row scaling, i.e., multiplying each row by the scale factor.
+
+
+## Brief description of architecture
+- [gen_data.py](src/gen_data.py): reads city data and builds a data dict: sets, costs, capacities, scenario demands, production coefficients. ￼
+- [ef.py](src/ef.py): builds the Extensive Form Pyomo model. ￼
+- [master.py](src/master.py): builds the Benders master (first-stage binary + operating costs per scenario + capacity rule constraint).
+- [sub.py](src/sub.py): builds a scenario subproblem and exposes `set_sub_probelm_rhs` to update the RHS as the master solution changes. ￼
+- [sub_solver.py](src/sub_solver.py): worker-side cache + solve_sub() that solves one scenario with a persistent solver and returns constants and coefficients needed to build the cuts (feas/opt) for the master problem. ￼
+- [benders.py](src/benders.py): looped Benders (master re-solve each iteration). Parallel sub-solves via a spawn pool; add cuts to ConstraintList in master.￼
+- [cb_benders.py](src/cb_benders.py): callback Benders (single master with lazy constraints). Parallel sub-solves per incumbent, return cuts, and add them as lazy constraints in master. 
+- [utils.py](src/utils.py): solver adapters (APPSI/persistent/rose), common solve wrapper, capacity-rule math, sanity checks, and CPU/threads helpers. ￼
+- [main.py](src/main.py): CLI and end-to-end orchestration. Sets multiprocessing spawn start-method for safety with threaded solvers. 
