@@ -1,4 +1,5 @@
 # sub_solver.py
+import sys
 from typing import Any, Dict, Tuple
 from pyomo.environ import value
 from pyomo.opt import TerminationCondition
@@ -56,7 +57,7 @@ def solve_sub(
     if scenario not in cache:
         sub = build_subproblem_for_scenario(data, scenario, facility_open)
         ss = get_solver(solver_name)  # persistent for Gurobi
-        setup_benders_sub_solver(
+        options = setup_benders_sub_solver(
             model=sub,
             solver=ss,
             options=options,
@@ -72,7 +73,7 @@ def solve_sub(
     # Collect statistics
     stats = {"sub_cons": sub.nconstraints(), "sub_vars": sub.nvariables()}
     # Solve (persistent path)
-    sub_result = ss.solve(sub)
+    sub_result = ss.solve(sub, options=options) if "solver_engine" in options else ss.solve(sub) # TODO this is a bit clunky come up with a cleaner solution for 'rose'.
     termination = sub_result.solver.termination_condition
 
     # Check if solver supports dual/ray extraction

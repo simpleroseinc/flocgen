@@ -101,9 +101,10 @@ def setup_benders_sub_solver(
     options: dict = None,
     solver_threads: int = 0,
     verbose: bool = False,
-) -> None:
+) -> Dict:
     """
     Prep the solver for Benders using the specified solver.
+    Returns the updated options dictionary.
     """
     if not isinstance(model, ConcreteModel):
         raise ValueError("The model must be a ConcreteModel instance.")
@@ -122,32 +123,50 @@ def setup_benders_sub_solver(
     if hasattr(solver, "set_callback") and callback:
         solver.set_callback(callback)
     if hasattr(solver, "set_gurobi_param"):
-        solver.set_gurobi_param("OutputFlag", bool(verbose))
+        solver.set_gurobi_param("OutputFlag", verbose)
         solver.set_gurobi_param("Threads", solver_threads)
         if options:
+            options["OutputFlag"] = verbose
+            options["Threads"] = solver_threads
             for key, val in options.items():
                 solver.set_gurobi_param(key, val)
-        return
+        else:
+            options = {"OutputFlag": verbose, "Threads": solver_threads}
+        return options
     elif hasattr(solver, "gurobi_options"):
+        solver.config.stream_solver = verbose
         solver.gurobi_options["OutputFlag"] = verbose
         solver.gurobi_options["Threads"] = solver_threads
         if options:
+            options["OutputFlag"] = verbose
+            options["Threads"] = solver_threads
             for key, val in options.items():
                 solver.gurobi_options[key] = val
-        solver.config.stream_solver = verbose
-        return
+        else:
+            options = {"OutputFlag": verbose, "Threads": solver_threads}
+        return options
     elif hasattr(solver, "highs_options"):
         solver.config.stream_solver = verbose
         solver.highs_options["output_flag"] = verbose
         solver.highs_options["threads"] = solver_threads
         if options:
+            options["output_flag"] = verbose
+            options["threads"] = solver_threads
             for key, val in options.items():
                 solver.highs_options[key] = val
-        return
+        else:
+            options = {"output_flag": verbose, "threads": solver_threads}
+        return options
     elif "rose" in solver_iface_name:
         if options:
             options["rank_burls"] = solver_threads
-        return
+            options["solver_engine"] = "rose_experimental_with_default_presolve"
+        else:
+            options = {
+                "rank_burls": solver_threads,
+                "solver_engine": "rose_experimental_with_default_presolve",
+            }
+        return options
     else:
         raise RuntimeError(f"Solver interface error for: '{solver_iface_name}'.")
 
