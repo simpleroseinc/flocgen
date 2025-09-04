@@ -31,22 +31,21 @@ def benders_solve(
     # If required by user relax integrality
     if relax:
         TransformationFactory("core.relax_integer_vars").apply_to(master)
+    # Set up solvers
+    ms = get_solver(solver)  # Master solver
 
+    # Set up for parallel subproblem solves
     num_scenarios = len(list(master.SCENARIOS))
     num_cores = get_physical_cores()
     solver_threads = num_cores if threads == 0 else threads
     if num_cores < solver_threads * (1 + num_scenarios):
         print(
-            f"WARNING: You're oversubscribing your CPU!\n\tAvailable physical cores: {num_cores}\n\tRequested: {solver_threads * (num_scenarios + 1)}."
+            f"WARNING: You're oversubscribing your CPU!\n"
+            f"\tAvailable physical cores: {num_cores}\n"
+            f"\tRequested: {solver_threads * (num_scenarios + 1)}."
         )
         sleep(5)  # Give user a chance to see the warning
-
-    # Set up solvers
-    ms = get_solver(solver)  # Master solver
-
-    # Set up for parallel subproblem solves
     ctx = mp.get_context("spawn")
-    pool_size = solver_threads * (1 + num_scenarios)
     sub_options = None
     if solver == "gurobi":
         sub_options = {
@@ -55,7 +54,7 @@ def benders_solve(
             # Use dual simplex so we can get Farkas Rays (i.e. direction of unboundedness for the dual) for infeasible primal subproblems
         }
     pool = ctx.Pool(
-        processes=pool_size,
+        processes=num_scenarios,
         initializer=sub_solver_init,
         initargs=(data, solver, sub_options, threads, verbose),
         maxtasksperchild=max_iters,
@@ -86,7 +85,6 @@ def benders_solve(
                 raise Exception(
                     f"Master problem {termination} at iteration {iteration}"
                 )
-            lower_bound = get_objective_value(master)  # Master objective value
             facility_open = {
                 i: value(master.facility_open[i]) for i in master.FACILITIES
             }
@@ -127,8 +125,8 @@ def benders_solve(
                     )
                     master.BendersCuts.add(
                         lhs
-                        >= 0
-                        + tol  # Greater than 0 (i.e. >=) here b/c we haven't transformed our customer demand rule to <= constraints so we have to flip the sign
+                        >= 0 + tol
+                        # Greater than 0 (i.e. >=) here b/c we haven't transformed our customer demand rule to <= constraints so we have to flip the sign
                     )
                 elif kind == "opt":
                     expected_operating_cost += value(master.prob[s]) * operating_cost
@@ -154,12 +152,15 @@ def benders_solve(
                 for i in master.FACILITIES
             )
             upper_bound = fixed + expected_operating_cost
+            lower_bound = get_objective_value(master)  # Master objective value
             print(
                 f"{iteration} Statistics:\n"
                 f"\tMaster: {master_cons} cons, {master_vars} vars\n"
                 f"\tSubproblem: {sub_cons // num_scenarios} cons, {sub_vars // num_scenarios} vars, {num_scenarios} scenarios\n"
                 f"\tViolations: {feas_violation} feas, {opt_violation} opt\n"
-                f"\tBounds: {lower_bound:.2f} <= {upper_bound:.2f}"
+                f"\tBounds: {lower_bound:.2f} <= {upper_bound:.2f}",
+                file=sys.__stdout__,
+                flush=True,
             )
             if not violated:
                 # Sanity check: master objective value should be equal to fixed cost plus expected subproblem cost
