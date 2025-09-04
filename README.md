@@ -2,11 +2,11 @@
 This project began as a simple stochastic facility location generator, and evolved into a small "Benders Decomposition Lab" intended for learning and experimentation. 
 You can:
 
-- Generate MPS/LP/NL instances for any U.S. state
+- Generate `.mps`/`.lp`/`.lp` instances for any U.S. state
 - Solve the generated problem in three ways:
-  1. Extensive Form (ef) — solve the full mixed-integer model 
-  2. Benders Decomposition (benders) — re-solve the master at each iteration; subproblem solves are in parallel 
-  3. Benders Decomposition w/ callbacks (cb_benders) — solve one master with lazy cuts; subproblem solves are in parallel
+  1. Extensive Form (**ef**) — solve the full mixed-integer model 
+  2. Benders Decomposition (**benders**) — re-solve the master at each iteration; subproblem solves are in parallel 
+  3. Benders Decomposition w/ callbacks (**cb_benders**) — solve one master with lazy cuts; subproblem solves are in parallel
 
 This code prioritizes clarity over micro-optimizations and is meant as an educational reference.
 
