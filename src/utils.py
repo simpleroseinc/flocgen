@@ -224,11 +224,11 @@ def solve_model(
     elif "rose" in solver_iface_name:
         if options:
             options["rank_burls"] = solver_threads
-            options["solver_engine"] = "rose_experimental_with_default_presolve"
+            #options["solver_engine"] = "rose_experimental_with_default_presolve"
         else:
             options = {
                 "rank_burls": solver_threads,
-                "solver_engine": "rose_experimental_with_default_presolve",
+                #"solver_engine": "rose_experimental_with_default_presolve",
             }
         return solver.solve(model, options=options)
     else:
