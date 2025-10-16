@@ -26,7 +26,6 @@ python-dateutil
 pytz
 requests
 rich
-rose.types @ https://simplerose-packages-public.s3.us-east-1.amazonaws.com/rose_types/release/rose_types-0.14.1-py3-none-any.whl#sha256=9ed90ab5986c398882168e589a59b4cac478acbb26dff7e30bd86bee72a42429
 rosepy @ https://simplerose-packages-public.s3.us-east-1.amazonaws.com/rosepy/release/rosepy-0.14.1-py3-none-any.whl#sha256=837744cede33f63ec1f9d534378537dec42f3fbebc12d6ba522d924b12cf28cc
 setuptools
 six
